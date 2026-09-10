@@ -6,8 +6,11 @@ async function boot() {
   const pathname = window.location.pathname.toLowerCase();
   const musicMode = hostname === 'music.nont.me' || pathname === '/music' || pathname.startsWith('/music/');
 
+  const favicon = document.querySelector('link[rel=\"icon\"]') || document.head.appendChild(Object.assign(document.createElement('link'), { rel: 'icon' }));
+
   if (musicMode) {
     document.title = 'NONT Music';
+    favicon.href = 'https://raw.githubusercontent.com/voidnont/nont/main/public/nont.png';
     document.documentElement.removeAttribute('data-theme');
     const [{ default: MusicApp }] = await Promise.all([
       import('./music/MusicApp.tsx'),
@@ -20,6 +23,7 @@ async function boot() {
   }
 
   document.title = 'NONT Nexus';
+  favicon.href = 'https://raw.githubusercontent.com/voidnont/NONT-Nexus/main/public/nexus-logo.png';
   const [{ default: App }] = await Promise.all([
     import('./App.jsx'),
     import('./styles.css'),

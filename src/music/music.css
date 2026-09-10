@@ -161,3 +161,5 @@ h1 em { font-style: normal; color: #878d96; }
   .row-actions button:first-child { display:none; }
   .now { border-radius:21px;padding:14px; }
 }
+
+.brand-icon img{width:31px;height:31px;object-fit:contain;border-radius:9px}.empty-player-logo{width:82px;height:82px;object-fit:contain;border-radius:22px;opacity:.92}

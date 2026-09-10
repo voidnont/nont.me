@@ -33,6 +33,8 @@ type Track = {
 type RepeatMode = "off" | "queue" | "track";
 
 const STORAGE_KEY = "nont.music.web.favorites.v1";
+const NONT_LOGO = "https://raw.githubusercontent.com/voidnont/nont/main/public/nont.png";
+
 
 function formatTime(value: number) {
   if (!Number.isFinite(value) || value < 0) return "0:00";
@@ -276,7 +278,7 @@ export default function App() {
 
       <header className="topbar">
         <button className="brand" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
-          <span className="brand-icon"><Music2 size={20} /></span>
+          <span className="brand-icon"><img src={NONT_LOGO} alt="NONT" /></span>
           <span><strong>NONT</strong><small>MUSIC</small></span>
         </button>
 
@@ -341,7 +343,7 @@ export default function App() {
         <aside className="now">
           <span className="eyebrow">NOW PLAYING</span>
           <div className="cover" style={current?.cover ? { backgroundImage: `url("${current.cover}")` } : { background: currentCover }}>
-            {!current && <Music2 size={48} />}
+            {!current && <img className="empty-player-logo" src={NONT_LOGO} alt="NONT" />}
           </div>
           <div className="now-copy">
             <div>
