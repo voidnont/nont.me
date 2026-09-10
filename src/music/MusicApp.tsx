@@ -1,40 +1,32 @@
 import {
-  Disc3,
   Heart,
   ListMusic,
+  Loader2,
   Music2,
   Pause,
   Play,
-  Plus,
   Repeat2,
   Search,
   Shuffle,
   SkipBack,
   SkipForward,
-  Upload,
   Volume2,
   VolumeX,
-  X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { ChangeEvent, DragEvent, FormEvent } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type Track = {
   id: string;
   title: string;
   artist: string;
-  album: string;
-  duration: number;
-  src: string;
-  cover?: string;
-  objectUrl?: string;
+  thumbnail: string;
+  publishedAt?: string | null;
 };
 
 type RepeatMode = "off" | "queue" | "track";
 
-const STORAGE_KEY = "nont.music.web.favorites.v1";
 const NONT_LOGO = "https://raw.githubusercontent.com/voidnont/nont/main/public/nont.png";
-
+const FAVORITES_KEY = "nont.music.youtube.favorites.v1";
 
 function formatTime(value: number) {
   if (!Number.isFinite(value) || value < 0) return "0:00";
@@ -43,371 +35,347 @@ function formatTime(value: number) {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-function cleanFilename(value: string) {
-  return value.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim();
+function decodeHtml(value: string) {
+  const textarea = document.createElement("textarea");
+  textarea.innerHTML = value;
+  return textarea.value;
 }
 
-function coverFor(track: Track) {
-  if (track.cover) return track.cover;
-  const hue = Math.abs([...track.id].reduce((n, c) => n + c.charCodeAt(0) * 7, 0)) % 360;
-  return `linear-gradient(145deg, hsl(${hue} 72% 55%), hsl(${(hue + 56) % 360} 70% 24%))`;
+function loadFavorites(): Track[] {
+  try {
+    const value = JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]");
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
 }
 
-export default function App() {
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const objectUrlsRef = useRef<Set<string>>(new Set());
-  const [library, setLibrary] = useState<Track[]>([]);
+export default function MusicApp() {
+  const playerRef = useRef<any>(null);
+  const playerReadyRef = useRef(false);
+  const pendingVideoRef = useRef<string | null>(null);
+  const endedHandlerRef = useRef<() => void>(() => undefined);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<Track[]>([]);
+  const [favorites, setFavorites] = useState<Track[]>(loadFavorites);
   const [queue, setQueue] = useState<Track[]>([]);
   const [current, setCurrent] = useState<Track | null>(null);
   const [playing, setPlaying] = useState(false);
-  const [query, setQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState("");
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(0.76);
+  const [volume, setVolume] = useState(76);
   const [muted, setMuted] = useState(false);
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState<RepeatMode>("off");
-  const [favorites, setFavorites] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
-    catch { return []; }
-  });
-  const [showUrl, setShowUrl] = useState(false);
-  const [url, setUrl] = useState("");
-  const [urlTitle, setUrlTitle] = useState("");
-  const [dragging, setDragging] = useState(false);
+  const [showFavorites, setShowFavorites] = useState(false);
+
+  const displayTracks = useMemo(() => (showFavorites ? favorites : results), [showFavorites, favorites, results]);
+  const favoriteIds = useMemo(() => new Set(favorites.map((track) => track.id)), [favorites]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(favorites));
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites.slice(0, 200)));
   }, [favorites]);
 
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.volume = muted ? 0 : volume;
-  }, [volume, muted]);
+    const win = window as any;
 
-  useEffect(() => {
+    const createPlayer = () => {
+      if (playerRef.current || !win.YT?.Player) return;
+      playerRef.current = new win.YT.Player("nont-youtube-player", {
+        width: "100%",
+        height: "100%",
+        playerVars: {
+          autoplay: 0,
+          controls: 1,
+          rel: 0,
+          playsinline: 1,
+          origin: window.location.origin,
+        },
+        events: {
+          onReady: (event: any) => {
+            playerReadyRef.current = true;
+            event.target.setVolume(volume);
+            if (muted) event.target.mute();
+            if (pendingVideoRef.current) {
+              event.target.loadVideoById(pendingVideoRef.current);
+              pendingVideoRef.current = null;
+            }
+          },
+          onStateChange: (event: any) => {
+            if (event.data === win.YT.PlayerState.PLAYING) setPlaying(true);
+            if (event.data === win.YT.PlayerState.PAUSED || event.data === win.YT.PlayerState.CUED) setPlaying(false);
+            if (event.data === win.YT.PlayerState.ENDED) {
+              setPlaying(false);
+              endedHandlerRef.current();
+            }
+          },
+          onError: () => {
+            setPlaying(false);
+            setSearchError("This YouTube video cannot be played in the embedded player. Choose another result.");
+          },
+        },
+      });
+    };
+
+    if (win.YT?.Player) createPlayer();
+    else {
+      const existing = document.querySelector('script[src="https://www.youtube.com/iframe_api"]');
+      const previous = win.onYouTubeIframeAPIReady;
+      win.onYouTubeIframeAPIReady = () => {
+        if (typeof previous === "function") previous();
+        createPlayer();
+      };
+      if (!existing) {
+        const script = document.createElement("script");
+        script.src = "https://www.youtube.com/iframe_api";
+        script.async = true;
+        document.head.appendChild(script);
+      }
+    }
+
     return () => {
-      objectUrlsRef.current.forEach((value) => URL.revokeObjectURL(value));
-      objectUrlsRef.current.clear();
+      try { playerRef.current?.destroy?.(); } catch { /* no-op */ }
+      playerRef.current = null;
+      playerReadyRef.current = false;
     };
   }, []);
 
-  const visibleTracks = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return library;
-    return library.filter((track) =>
-      `${track.title} ${track.artist} ${track.album}`.toLowerCase().includes(q)
-    );
-  }, [library, query]);
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const player = playerRef.current;
+      if (!playerReadyRef.current || !player) return;
+      try {
+        const nextPosition = Number(player.getCurrentTime?.() || 0);
+        const nextDuration = Number(player.getDuration?.() || 0);
+        if (Number.isFinite(nextPosition)) setPosition(nextPosition);
+        if (Number.isFinite(nextDuration)) setDuration(nextDuration);
+      } catch { /* player not ready yet */ }
+    }, 500);
+    return () => window.clearInterval(timer);
+  }, []);
 
-  function readFiles(list: FileList | File[]) {
-    const files = Array.from(list).filter((file) => file.type.startsWith("audio/") || /\.(mp3|m4a|aac|wav|ogg|flac|opus)$/i.test(file.name));
-    if (!files.length) return;
-
-    const added = files.map((file) => {
-      const objectUrl = URL.createObjectURL(file);
-      objectUrlsRef.current.add(objectUrl);
-      const base = cleanFilename(file.name);
-      const split = base.split(" - ");
-      return {
-        id: `${file.name}-${file.size}-${file.lastModified}`,
-        title: split.length > 1 ? split.slice(1).join(" - ") : base,
-        artist: split.length > 1 ? split[0] : "Local file",
-        album: "Browser library",
-        duration: 0,
-        src: objectUrl,
-        objectUrl,
-      } satisfies Track;
-    });
-
-    setLibrary((old) => {
-      const ids = new Set(old.map((t) => t.id));
-      return [...old, ...added.filter((t) => !ids.has(t.id))];
-    });
-    setQueue((old) => old.length ? old : added);
-    if (!current && added[0]) void startTrack(added[0], added);
-  }
-
-  function onFiles(event: ChangeEvent<HTMLInputElement>) {
-    if (event.target.files) readFiles(event.target.files);
-    event.target.value = "";
-  }
-
-  function onDrop(event: DragEvent<HTMLDivElement>) {
-    event.preventDefault();
-    setDragging(false);
-    if (event.dataTransfer.files?.length) readFiles(event.dataTransfer.files);
-  }
-
-  async function startTrack(track: Track, nextQueue = queue.length ? queue : library) {
-    const audio = audioRef.current;
-    if (!audio) return;
-    setCurrent(track);
-    setPosition(0);
-    setDuration(track.duration || 0);
-    setQueue(nextQueue.length ? nextQueue : [track]);
-
-    if (audio.src !== track.src) {
-      audio.src = track.src;
-      audio.load();
-    }
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!playerReadyRef.current || !player) return;
     try {
-      await audio.play();
-      setPlaying(true);
-    } catch {
-      setPlaying(false);
-    }
-  }
+      player.setVolume(volume);
+      if (muted) player.mute();
+      else player.unMute();
+    } catch { /* no-op */ }
+  }, [volume, muted]);
 
-  async function togglePlay() {
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (!current) {
-      if (library[0]) await startTrack(library[0], library);
-      return;
-    }
-    if (audio.paused) {
-      try { await audio.play(); setPlaying(true); } catch { setPlaying(false); }
+  function playTrack(track: Track, nextQueue: Track[] = displayTracks) {
+    setCurrent(track);
+    setQueue(nextQueue.length ? nextQueue : [track]);
+    setPosition(0);
+    setDuration(0);
+    setSearchError("");
+    if (playerReadyRef.current && playerRef.current) {
+      playerRef.current.loadVideoById(track.id);
     } else {
-      audio.pause();
-      setPlaying(false);
+      pendingVideoRef.current = track.id;
     }
   }
 
   function move(direction: 1 | -1) {
     if (!current || !queue.length) return;
-    const index = queue.findIndex((track) => track.id === current.id);
-    if (shuffle && direction === 1) {
-      const candidates = queue.filter((t) => t.id !== current.id);
-      const next = candidates[Math.floor(Math.random() * candidates.length)] || current;
-      void startTrack(next, queue);
+    if (shuffle && direction === 1 && queue.length > 1) {
+      const candidates = queue.filter((track) => track.id !== current.id);
+      const next = candidates[Math.floor(Math.random() * candidates.length)];
+      if (next) playTrack(next, queue);
       return;
     }
+    const index = Math.max(0, queue.findIndex((track) => track.id === current.id));
     const nextIndex = (index + direction + queue.length) % queue.length;
-    void startTrack(queue[nextIndex], queue);
+    playTrack(queue[nextIndex], queue);
   }
 
   function onEnded() {
     if (!current) return;
     if (repeat === "track") {
-      const audio = audioRef.current;
-      if (audio) { audio.currentTime = 0; void audio.play(); }
+      playerRef.current?.seekTo?.(0, true);
+      playerRef.current?.playVideo?.();
       return;
     }
     const index = queue.findIndex((track) => track.id === current.id);
     if (index < queue.length - 1 || repeat === "queue") move(1);
-    else setPlaying(false);
+  }
+  endedHandlerRef.current = onEnded;
+
+  function togglePlay() {
+    const player = playerRef.current;
+    if (!playerReadyRef.current || !player) return;
+    if (!current) {
+      if (displayTracks[0]) playTrack(displayTracks[0], displayTracks);
+      return;
+    }
+    try {
+      const state = player.getPlayerState?.();
+      const win = window as any;
+      if (state === win.YT?.PlayerState?.PLAYING) player.pauseVideo();
+      else player.playVideo();
+    } catch { /* no-op */ }
   }
 
   function seek(value: number) {
-    const audio = audioRef.current;
-    if (!audio || !Number.isFinite(audio.duration)) return;
-    audio.currentTime = value;
+    if (!playerReadyRef.current || !playerRef.current) return;
+    playerRef.current.seekTo(value, true);
     setPosition(value);
   }
 
-  function toggleFavorite(id: string) {
-    setFavorites((old) => old.includes(id) ? old.filter((x) => x !== id) : [...old, id]);
-  }
-
   function cycleRepeat() {
-    setRepeat((old) => old === "off" ? "queue" : old === "queue" ? "track" : "off");
+    setRepeat((value) => value === "off" ? "queue" : value === "queue" ? "track" : "off");
   }
 
-  function addUrl(event: FormEvent) {
+  function toggleFavorite(track: Track) {
+    setFavorites((items) => {
+      if (items.some((item) => item.id === track.id)) return items.filter((item) => item.id !== track.id);
+      return [track, ...items];
+    });
+  }
+
+  async function searchYouTube(event: FormEvent) {
     event.preventDefault();
-    const value = url.trim();
-    if (!/^https?:\/\//i.test(value)) return;
-    const title = urlTitle.trim() || cleanFilename(decodeURIComponent(value.split("/").pop()?.split("?")[0] || "Web track"));
-    const track: Track = {
-      id: `url-${crypto.randomUUID()}`,
-      title,
-      artist: "Web audio",
-      album: "Direct audio URL",
-      duration: 0,
-      src: value,
-    };
-    setLibrary((old) => [...old, track]);
-    setQueue((old) => [...old, track]);
-    setUrl("");
-    setUrlTitle("");
-    setShowUrl(false);
-    void startTrack(track, [...queue, track]);
-  }
-
-  function removeTrack(id: string) {
-    const target = library.find((track) => track.id === id);
-    if (target?.objectUrl) { URL.revokeObjectURL(target.objectUrl); objectUrlsRef.current.delete(target.objectUrl); }
-    setLibrary((old) => old.filter((track) => track.id !== id));
-    setQueue((old) => old.filter((track) => track.id !== id));
-    setFavorites((old) => old.filter((fav) => fav !== id));
-    if (current?.id === id) {
-      audioRef.current?.pause();
-      setCurrent(null);
-      setPlaying(false);
-      setPosition(0);
-      setDuration(0);
+    const text = query.trim();
+    if (!text || searching) return;
+    setSearching(true);
+    setSearchError("");
+    setShowFavorites(false);
+    try {
+      const response = await fetch(`/api/youtube-search?q=${encodeURIComponent(text)}`);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || `Search failed (${response.status}).`);
+      const tracks: Track[] = (data.items || []).map((item: Track) => ({
+        ...item,
+        title: decodeHtml(item.title),
+        artist: decodeHtml(item.artist),
+      }));
+      setResults(tracks);
+      setQueue(tracks);
+      if (!tracks.length) setSearchError("No playable YouTube videos were found for that search.");
+    } catch (error) {
+      setResults([]);
+      setSearchError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSearching(false);
     }
   }
 
-  const currentCover = current ? coverFor(current) : "linear-gradient(145deg,#22262c,#0d0e11)";
+  const currentThumb = current?.thumbnail || NONT_LOGO;
 
   return (
-    <div
-      className={`app ${dragging ? "dragging" : ""}`}
-      onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-      onDragLeave={(e) => { if (e.currentTarget === e.target) setDragging(false); }}
-      onDrop={onDrop}
-    >
-      <audio
-        ref={audioRef}
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-        onTimeUpdate={(e) => setPosition(e.currentTarget.currentTime)}
-        onLoadedMetadata={(e) => {
-          const d = e.currentTarget.duration;
-          setDuration(Number.isFinite(d) ? d : 0);
-          if (current && Number.isFinite(d)) {
-            setLibrary((old) => old.map((t) => t.id === current.id ? { ...t, duration: d } : t));
-          }
-        }}
-        onEnded={onEnded}
-      />
+    <div className="music-app">
+      <header className="music-topbar">
+        <a className="music-brand" href="/music" aria-label="NONT Music home">
+          <span className="music-brand-icon"><img src={NONT_LOGO} alt="NONT" /></span>
+          <span><strong>NONT</strong><small>MUSIC WEB</small></span>
+        </a>
 
-      <header className="topbar">
-        <button className="brand" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
-          <span className="brand-icon"><img src={NONT_LOGO} alt="NONT" /></span>
-          <span><strong>NONT</strong><small>MUSIC</small></span>
+        <form className="youtube-search" onSubmit={searchYouTube}>
+          <Search size={18} />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search YouTube for songs, artists, albums…"
+            aria-label="Search YouTube"
+          />
+          <button className="music-primary" type="submit" disabled={searching || !query.trim()}>
+            {searching ? <Loader2 size={17} className="spin" /> : <Search size={17} />}
+            Search
+          </button>
+        </form>
+
+        <button className={showFavorites ? "favorites-button active" : "favorites-button"} onClick={() => setShowFavorites((value) => !value)}>
+          <Heart size={17} fill={showFavorites ? "currentColor" : "none"} /> Favorites
         </button>
-
-        <div className="search">
-          <Search size={17} />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search your music" />
-        </div>
-
-        <div className="top-actions">
-          <button className="ghost" onClick={() => setShowUrl(true)}><Plus size={16} /> URL</button>
-          <button className="primary" onClick={() => fileInputRef.current?.click()}><Upload size={16} /> Add music</button>
-          <input ref={fileInputRef} type="file" accept="audio/*,.flac,.m4a,.opus" multiple hidden onChange={onFiles} />
-        </div>
       </header>
 
-      <main className="layout">
-        <section className="library">
-          <div className="section-head">
+      <main className="music-layout">
+        <section className="music-results-section">
+          <div className="music-hero">
             <div>
-              <span className="eyebrow">NONT WEB PLAYER</span>
-              <h1>Your music.<br/><em>Nothing in the way.</em></h1>
-              <p>Drop audio files into NONT or add a browser-playable audio URL. Playback happens in your browser.</p>
+              <span className="music-eyebrow">NONT WEB PLAYER · YOUTUBE INNERTUBE</span>
+              <h1>Find it.<br /><em>Press play.</em></h1>
+              <p>Search YouTube through the signed-out WEB InnerTube endpoint and play through YouTube's embedded player. No developer API key and no downloads.</p>
             </div>
-            <div className="library-stats">
-              <strong>{library.length}</strong>
-              <span>tracks loaded</span>
-            </div>
+            <div className="music-stat"><strong>{displayTracks.length}</strong><span>{showFavorites ? "favorites" : "results"}</span></div>
           </div>
 
-          {library.length === 0 ? (
-            <button className="dropzone" onClick={() => fileInputRef.current?.click()}>
-              <span><Disc3 size={34} /></span>
-              <strong>Drop music here</strong>
-              <small>MP3, M4A, AAC, WAV, OGG, FLAC and Opus</small>
-            </button>
+          {searchError && <div className="music-error">{searchError}</div>}
+
+          {displayTracks.length === 0 ? (
+            <div className="music-empty">
+              <img src={NONT_LOGO} alt="NONT" />
+              <h2>{showFavorites ? "No favorites yet" : "Search for music"}</h2>
+              <p>{showFavorites ? "Heart a song and it will appear here." : "Use the search box above to find music videos on YouTube."}</p>
+            </div>
           ) : (
-            <div className="track-list">
-              <div className="track-header">
-                <span>#</span><span>Title</span><span>Album</span><span>Time</span><span />
-              </div>
-              {visibleTracks.map((track, index) => (
-                <div className={`track-row ${current?.id === track.id ? "active" : ""}`} key={track.id}>
-                  <button className="row-play" onClick={() => current?.id === track.id ? void togglePlay() : void startTrack(track, visibleTracks)}>
-                    {current?.id === track.id && playing ? <Pause size={15} /> : <Play size={15} />}
+            <div className="youtube-results">
+              {displayTracks.map((track, index) => (
+                <article className={current?.id === track.id ? "youtube-row active" : "youtube-row"} key={track.id}>
+                  <button className="result-play" onClick={() => current?.id === track.id ? togglePlay() : playTrack(track, displayTracks)} aria-label={`Play ${track.title}`}>
+                    {current?.id === track.id && playing ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
                   </button>
-                  <button className="track-main" onClick={() => void startTrack(track, visibleTracks)}>
-                    <span className="tiny-cover" style={track.cover ? { backgroundImage: `url("${track.cover}")` } : { background: coverFor(track) }} />
+                  <button className="result-main" onClick={() => playTrack(track, displayTracks)}>
+                    <img src={track.thumbnail} alt="" loading="lazy" />
                     <span><strong>{track.title}</strong><small>{track.artist}</small></span>
                   </button>
-                  <span className="album">{track.album}</span>
-                  <span className="time">{formatTime(track.duration)}</span>
-                  <div className="row-actions">
-                    <button className={favorites.includes(track.id) ? "liked" : ""} onClick={() => toggleFavorite(track.id)}><Heart size={15} fill={favorites.includes(track.id) ? "currentColor" : "none"} /></button>
-                    <button onClick={() => removeTrack(track.id)}><X size={15} /></button>
-                  </div>
-                </div>
+                  <span className="result-source">YouTube</span>
+                  <button className={favoriteIds.has(track.id) ? "result-heart liked" : "result-heart"} onClick={() => toggleFavorite(track)} aria-label="Favorite">
+                    <Heart size={17} fill={favoriteIds.has(track.id) ? "currentColor" : "none"} />
+                  </button>
+                </article>
               ))}
             </div>
           )}
         </section>
 
-        <aside className="now">
-          <span className="eyebrow">NOW PLAYING</span>
-          <div className="cover" style={current?.cover ? { backgroundImage: `url("${current.cover}")` } : { background: currentCover }}>
-            {!current && <img className="empty-player-logo" src={NONT_LOGO} alt="NONT" />}
-          </div>
-          <div className="now-copy">
-            <div>
-              <strong>{current?.title || "Nothing playing"}</strong>
-              <span>{current?.artist || "Add music to begin"}</span>
-            </div>
-            {current && <button className={favorites.includes(current.id) ? "liked" : ""} onClick={() => toggleFavorite(current.id)}><Heart size={18} fill={favorites.includes(current.id) ? "currentColor" : "none"} /></button>}
+        <aside className="music-now">
+          <span className="music-eyebrow">NOW PLAYING</span>
+          <div className="youtube-player-shell">
+            <div id="nont-youtube-player" />
+            {!current && <div className="player-placeholder"><img src={NONT_LOGO} alt="NONT" /><span>Choose a song</span></div>}
           </div>
 
-          <div className="progress-block">
-            <input
-              className="range progress"
-              type="range"
-              min="0"
-              max={Math.max(duration, 0)}
-              step="0.1"
-              value={Math.min(position, duration || 0)}
-              onChange={(e) => seek(Number(e.target.value))}
-              disabled={!current}
-            />
+          <div className="now-track">
+            <img src={currentThumb} alt="" />
+            <div><strong>{current?.title || "Nothing playing"}</strong><span>{current?.artist || "Search YouTube to begin"}</span></div>
+            {current && <button className={favoriteIds.has(current.id) ? "liked" : ""} onClick={() => toggleFavorite(current)}><Heart size={18} fill={favoriteIds.has(current.id) ? "currentColor" : "none"} /></button>}
+          </div>
+
+          <div className="music-progress">
+            <input type="range" min="0" max={Math.max(duration, 0)} step="0.1" value={Math.min(position, duration || 0)} onChange={(event) => seek(Number(event.target.value))} disabled={!current} />
             <div><span>{formatTime(position)}</span><span>{formatTime(duration)}</span></div>
           </div>
 
-          <div className="controls">
-            <button className={shuffle ? "active-control" : ""} title="Shuffle" onClick={() => setShuffle((v) => !v)}><Shuffle size={18} /></button>
-            <button title="Previous" onClick={() => move(-1)}><SkipBack size={21} fill="currentColor" /></button>
-            <button className="play-main" onClick={() => void togglePlay()}>{playing ? <Pause size={23} fill="currentColor" /> : <Play size={23} fill="currentColor" />}</button>
-            <button title="Next" onClick={() => move(1)}><SkipForward size={21} fill="currentColor" /></button>
-            <button className={repeat !== "off" ? "active-control repeat" : "repeat"} title={`Repeat: ${repeat}`} onClick={cycleRepeat}><Repeat2 size={18} />{repeat === "track" && <b>1</b>}</button>
+          <div className="music-controls">
+            <button className={shuffle ? "active" : ""} onClick={() => setShuffle((value) => !value)} title="Shuffle"><Shuffle size={18} /></button>
+            <button onClick={() => move(-1)} title="Previous"><SkipBack size={22} fill="currentColor" /></button>
+            <button className="main-play" onClick={togglePlay} title={playing ? "Pause" : "Play"}>{playing ? <Pause size={23} fill="currentColor" /> : <Play size={23} fill="currentColor" />}</button>
+            <button onClick={() => move(1)} title="Next"><SkipForward size={22} fill="currentColor" /></button>
+            <button className={repeat !== "off" ? "active repeat" : "repeat"} onClick={cycleRepeat} title={`Repeat: ${repeat}`}><Repeat2 size={18} />{repeat === "track" && <b>1</b>}</button>
           </div>
 
-          <div className="volume-row">
-            <button onClick={() => setMuted((v) => !v)}>{muted || volume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />}</button>
-            <input className="range" type="range" min="0" max="1" step="0.01" value={volume} onChange={(e) => { setVolume(Number(e.target.value)); setMuted(false); }} />
+          <div className="music-volume">
+            <button onClick={() => setMuted((value) => !value)}>{muted || volume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />}</button>
+            <input type="range" min="0" max="100" step="1" value={volume} onChange={(event) => { setVolume(Number(event.target.value)); setMuted(false); }} />
           </div>
 
-          <div className="queue">
-            <div className="queue-title"><span><ListMusic size={16}/> Queue</span><small>{queue.length}</small></div>
-            <div className="queue-list">
-              {queue.length === 0 ? <p>Queue is empty.</p> : queue.slice(0, 12).map((track) => (
-                <button key={track.id} className={current?.id === track.id ? "queue-item active" : "queue-item"} onClick={() => void startTrack(track, queue)}>
-                  <span className="queue-art" style={track.cover ? { backgroundImage: `url("${track.cover}")` } : { background: coverFor(track) }} />
+          <div className="music-queue">
+            <div className="queue-heading"><span><ListMusic size={16} /> Queue</span><small>{queue.length}</small></div>
+            <div className="queue-items">
+              {queue.length === 0 ? <p>Search YouTube to build a queue.</p> : queue.slice(0, 12).map((track) => (
+                <button className={current?.id === track.id ? "queue-song active" : "queue-song"} key={track.id} onClick={() => playTrack(track, queue)}>
+                  <img src={track.thumbnail} alt="" />
                   <span><strong>{track.title}</strong><small>{track.artist}</small></span>
-                  <span>{formatTime(track.duration)}</span>
                 </button>
               ))}
             </div>
           </div>
         </aside>
       </main>
-
-      {showUrl && (
-        <div className="modal-backdrop" onMouseDown={() => setShowUrl(false)}>
-          <form className="modal" onSubmit={addUrl} onMouseDown={(e) => e.stopPropagation()}>
-            <div className="modal-head"><div><small>WEB AUDIO</small><h2>Add audio URL</h2></div><button type="button" onClick={() => setShowUrl(false)}><X size={18}/></button></div>
-            <label>Direct audio URL<input autoFocus value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com/song.mp3" /></label>
-            <label>Title <span>(optional)</span><input value={urlTitle} onChange={(e) => setUrlTitle(e.target.value)} placeholder="Track title" /></label>
-            <p>The URL must be directly playable by your browser and permit cross-origin playback where required.</p>
-            <button className="primary full" type="submit">Add to player</button>
-          </form>
-        </div>
-      )}
-
-      {dragging && <div className="drag-overlay"><Upload size={38}/><strong>Drop to add music</strong></div>}
     </div>
   );
 }
