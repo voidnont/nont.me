@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ArrowDownToLine, Bot, Boxes, Check, CheckCircle2, ChevronRight, Cloud, Code2,
-  Download, ExternalLink, FileArchive, Globe2, Home, KeyRound, Library,
-  LoaderCircle, Moon, Music2, PackageOpen, Plus, RefreshCw, Search, Send,
-  Settings, ShieldCheck, Sparkles, Sun, Trash2, X, XCircle,
+  ArrowDownToLine, Boxes, Check, CheckCircle2, ChevronRight,
+  Download, ExternalLink, FileArchive, Globe2, Home, Library,
+  LoaderCircle, Moon, Music2, PackageOpen, Plus, RefreshCw, Search,
+  Settings, ShieldCheck, Sun, Trash2, X, XCircle,
 } from 'lucide-react';
 
 const VERSION = '1.0.0';
@@ -13,23 +13,14 @@ const LOGO = 'https://raw.githubusercontent.com/voidnont/NONT-Nexus/main/public/
 
 const nav = [
   ['home', 'Home', Home], ['library', 'Library', Library], ['downloads', 'Downloads', Download],
-  ['web-search', 'Web Search', Globe2], ['ai-chat', 'AI Chat', Bot], ['updates', 'Updates', RefreshCw],
+  ['web-search', 'Web Search', Globe2], ['updates', 'Updates', RefreshCw],
   ['settings', 'Settings', Settings],
 ];
 
 const catalog = [
   { id: 'nont', name: 'NONT', subtitle: 'Music, connected.', description: 'The NONT music player and the center of the NONT ecosystem.', category: 'MUSIC', kind: 'github', repo: NONT_REPO, extensions: ['.exe'], featured: true, icon: Music2 },
-  { id: 'nexus-ai', name: 'Nexus AI', subtitle: 'One place for your models.', description: 'Bring your own cloud API key and chat directly inside Nexus.', category: 'AI', kind: 'builtin', route: 'ai-chat', featured: true, icon: Bot },
   { id: 'web-search', name: 'Web Search', subtitle: 'Search without leaving Nexus.', description: 'Search the public web, inspect results and open sources.', category: 'WEB', kind: 'builtin', route: 'web-search', icon: Globe2 },
   { id: 'downloads', name: 'Downloads', subtitle: 'Release files in one place.', description: 'Open direct downloads and GitHub Release assets from Nexus.', category: 'TOOLS', kind: 'builtin', route: 'downloads', icon: Download },
-];
-
-const presets = [
-  ['OpenAI', 'https://api.openai.com/v1', 'gpt-5.6'],
-  ['OpenRouter', 'https://openrouter.ai/api/v1', 'openai/gpt-5.6'],
-  ['Google Gemini', 'https://generativelanguage.googleapis.com/v1beta/openai', 'gemini-3.8-flash'],
-  ['Groq', 'https://api.groq.com/openai/v1', ''],
-  ['Together', 'https://api.together.xyz/v1', ''],
 ];
 
 function readJson(key, fallback) {
@@ -87,31 +78,17 @@ export default function App() {
   const [webResults, setWebResults] = useState([]);
   const [webBusy, setWebBusy] = useState(false);
   const [webError, setWebError] = useState('');
-  const [providers, setProviders] = useState(() => readJson('nexus.web.providers', []));
-  const [activeProvider, setActiveProvider] = useState(() => localStorage.getItem('nexus.web.activeProvider') || '');
-  const [messages, setMessages] = useState(() => readJson('nexus.web.messages', []));
-  const [chatInput, setChatInput] = useState('');
-  const [chatBusy, setChatBusy] = useState(false);
-  const [preset, setPreset] = useState(0);
-  const [providerName, setProviderName] = useState(presets[0][0]);
-  const [providerUrl, setProviderUrl] = useState(presets[0][1]);
-  const [providerModel, setProviderModel] = useState(presets[0][2]);
-  const [providerKey, setProviderKey] = useState('');
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem('nexus.web.theme', theme);
   }, [theme]);
   useEffect(() => localStorage.setItem('nexus.web.downloads', JSON.stringify(downloads.slice(0, 100))), [downloads]);
-  useEffect(() => localStorage.setItem('nexus.web.providers', JSON.stringify(providers)), [providers]);
-  useEffect(() => localStorage.setItem('nexus.web.messages', JSON.stringify(messages.slice(-80))), [messages]);
-  useEffect(() => localStorage.setItem('nexus.web.activeProvider', activeProvider), [activeProvider]);
 
   const visibleApps = useMemo(() => {
     const q = query.trim().toLowerCase();
     return q ? catalog.filter((app) => `${app.name} ${app.subtitle} ${app.description} ${app.category}`.toLowerCase().includes(q)) : catalog;
   }, [query]);
-  const selectedProvider = providers.find((p) => p.id === activeProvider);
 
   async function checkRepo(repo, extensions) {
     setReleaseChecks((x) => ({ ...x, [repo]: { status: 'checking' } }));
@@ -166,42 +143,6 @@ export default function App() {
     finally { setWebBusy(false); }
   }
 
-  function applyPreset(index) {
-    setPreset(index); const [name, url, model] = presets[index];
-    setProviderName(name); setProviderUrl(url); setProviderModel(model);
-  }
-
-  function saveProvider(event) {
-    event.preventDefault();
-    if (!providerName.trim() || !providerUrl.trim() || !providerModel.trim() || !providerKey.trim()) return alert('Name, URL, model and API key are required.');
-    const id = crypto.randomUUID();
-    const next = [...providers, { id, name: providerName.trim(), baseUrl: providerUrl.trim().replace(/\/$/, ''), model: providerModel.trim(), apiKey: providerKey.trim() }];
-    setProviders(next); setActiveProvider(id); setProviderKey('');
-  }
-
-  function removeProvider(id) {
-    setProviders((items) => items.filter((p) => p.id !== id));
-    if (activeProvider === id) setActiveProvider('');
-  }
-
-  async function submitChat(event) {
-    event.preventDefault();
-    const text = chatInput.trim(); if (!text || chatBusy) return;
-    if (!selectedProvider) return alert('Add and select a cloud provider in Settings first.');
-    const next = [...messages, { role: 'user', content: text }];
-    setMessages(next); setChatInput(''); setChatBusy(true);
-    try {
-      const r = await fetch('/api/chat', {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ baseUrl: selectedProvider.baseUrl, model: selectedProvider.model, apiKey: selectedProvider.apiKey, messages: next.slice(-18) }),
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error || 'AI request failed');
-      setMessages((items) => [...items, { role: 'assistant', content: data.text }]);
-    } catch (error) {
-      setMessages((items) => [...items, { role: 'assistant', content: `Error: ${String(error)}` }]);
-    } finally { setChatBusy(false); }
-  }
 
   return <div className="shell">
     <aside className="sidebar">
@@ -215,8 +156,8 @@ export default function App() {
       <header className="topbar"><div className="search"><Search size={17}/><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search Nexus library"/></div><div className="top-actions"><button className="icon-button" onClick={() => setTheme(theme === 'bright' ? 'dark' : 'bright')}>{theme === 'bright' ? <Moon size={17}/> : <Sun size={17}/>}</button><button className="primary compact" onClick={() => setShowAdd(true)}><Plus size={16}/> Add download</button></div></header>
 
       {page === 'home' && <section className="content">
-        <div className="hero"><div><div className="eyebrow"><i/> NONT ECOSYSTEM · WEB</div><h1>Your apps.<br/><em>One signal.</em></h1><p>NONT Nexus, adapted for the browser: releases, downloads, search and cloud AI in one responsive home.</p><div className="hero-actions"><button className="primary" onClick={() => setPage('library')}><Boxes size={18}/> Open library</button><button className="secondary" onClick={() => setPage('ai-chat')}><Bot size={18}/> Open Nexus AI</button></div></div><div className="signal"><span/><span/><div className="signal-core"><img src={LOGO} alt=""/></div><div className="bars">{Array.from({length:21}).map((_,i)=><i key={i} style={{height:`${18+((i*17)%48)}px`}}/> )}</div></div></div>
-        <div className="home-split"><div><Title title="Featured" subtitle="The first apps and tools inside your Nexus"/><div className="app-grid">{visibleApps.filter((a)=>a.featured).map((app)=><AppCard key={app.id} app={app} busy={releaseChecks[app.repo]?.status==='checking'} onOpen={()=>installApp(app)}/>)}</div></div><aside className="pulse"><span className="category">SYSTEM</span><h3>Nexus pulse</h3><Pulse icon={<Music2 size={16}/>} label="NONT" value="Release download ready"/><Pulse icon={<Bot size={16}/>} label="AI" value={`${providers.length} cloud provider${providers.length===1?'':'s'}`}/><Pulse icon={<Download size={16}/>} label="Downloads" value={`${downloads.length} in history`}/><Pulse icon={<Globe2 size={16}/>} label="Search" value="Serverless web search"/><button className="ghost" onClick={()=>setPage('updates')}>Check ecosystem updates <ChevronRight size={14}/></button></aside></div>
+        <div className="hero"><div><div className="eyebrow"><i/> NONT ECOSYSTEM · WEB</div><h1>Your apps.<br/><em>One signal.</em></h1><p>NONT Nexus, adapted for the browser: releases, downloads and web search in one responsive home.</p><div className="hero-actions"><button className="primary" onClick={() => setPage('library')}><Boxes size={18}/> Open library</button></div></div><div className="signal"><span/><span/><div className="signal-core"><img src={LOGO} alt=""/></div><div className="bars">{Array.from({length:21}).map((_,i)=><i key={i} style={{height:`${18+((i*17)%48)}px`}}/> )}</div></div></div>
+        <div className="home-split"><div><Title title="Featured" subtitle="The first apps and tools inside your Nexus"/><div className="app-grid">{visibleApps.filter((a)=>a.featured).map((app)=><AppCard key={app.id} app={app} busy={releaseChecks[app.repo]?.status==='checking'} onOpen={()=>installApp(app)}/>)}</div></div><aside className="pulse"><span className="category">SYSTEM</span><h3>Nexus pulse</h3><Pulse icon={<Music2 size={16}/>} label="NONT" value="Release download ready"/><Pulse icon={<Download size={16}/>} label="Downloads" value={`${downloads.length} in history`}/><Pulse icon={<Globe2 size={16}/>} label="Search" value="Serverless web search"/><button className="ghost" onClick={()=>setPage('updates')}>Check ecosystem updates <ChevronRight size={14}/></button></aside></div>
       </section>}
 
       {page === 'library' && <section className="content"><Title title="Library" subtitle="NONT apps and Nexus tools, adapted for the web."/><div className="app-grid all">{visibleApps.map((app)=><AppCard key={app.id} app={app} busy={releaseChecks[app.repo]?.status==='checking'} onOpen={()=>installApp(app)}/>)}</div></section>}
@@ -225,11 +166,10 @@ export default function App() {
 
       {page === 'web-search' && <section className="content"><Title title="Web Search" subtitle="Search the public web from Nexus."/><form className="web-search" onSubmit={searchWeb}><Globe2 size={20}/><input value={webQuery} onChange={(e)=>setWebQuery(e.target.value)} placeholder="Search the web…"/><button className="primary" disabled={webBusy}>{webBusy?<LoaderCircle className="spin" size={16}/>:<Search size={16}/>} Search</button></form>{webError&&<div className="notice error"><XCircle size={17}/>{webError}</div>}<div className="web-results">{webResults.map((r,i)=><button key={r.url+i} onClick={()=>window.open(r.url,'_blank','noopener,noreferrer')}><span>{String(i+1).padStart(2,'0')}</span><div><strong>{r.title}</strong><small>{r.url}</small><p>{r.snippet}</p></div><ExternalLink size={16}/></button>)}</div></section>}
 
-      {page === 'ai-chat' && <section className="content ai-page"><Title title="Nexus AI" subtitle="Cloud AI works directly on the web. Local OpenCode remains a desktop Nexus feature." action={<button className="secondary compact" onClick={()=>setMessages([])}><Plus size={15}/> New chat</button>}/><div className="opencode-card"><span><Code2 size={20}/></span><div><small>LOCAL CODING AGENT</small><strong>OpenCode</strong><p>A website cannot start or control a local OpenCode process. Use the desktop Nexus app for integrated OpenCode; use BYOK cloud providers here.</p></div><span className="state-chip">Desktop only</span></div><div className="ai-layout"><aside className="ai-rail"><label>Provider</label><select value={activeProvider} onChange={(e)=>setActiveProvider(e.target.value)}><option value="">Choose AI engine</option>{providers.map((p)=><option key={p.id} value={p.id}>{p.name} · {p.model}</option>)}</select>{selectedProvider?<div className="cloud-summary"><Cloud size={17}/><div><strong>{selectedProvider.name}</strong><span>{selectedProvider.model}</span><small>Key stored in this browser</small></div></div>:<div className="cloud-summary"><Cloud size={17}/><div><strong>No engine selected</strong><span>Add one in Settings</span><small>BYOK cloud providers</small></div></div>}<button className="ghost" onClick={()=>setPage('settings')}>Configure AI providers <ChevronRight size={14}/></button></aside><div className="chat"><div className="chat-scroll">{messages.length===0?<div className="chat-empty"><Sparkles size={28}/><h3>Ask Nexus</h3><p>Select one of your saved providers, then start a conversation.</p></div>:messages.map((m,i)=><div className={`message ${m.role}`} key={i}><span>{m.role==='user'?'YOU':'NEXUS'}</span><p>{m.content}</p></div>)}</div><form className="composer" onSubmit={submitChat}><textarea rows="1" value={chatInput} onChange={(e)=>setChatInput(e.target.value)} placeholder={`Message ${selectedProvider?.name || 'your AI engine'}…`}/><button disabled={chatBusy||!chatInput.trim()}>{chatBusy?<LoaderCircle className="spin" size={17}/>:<Send size={17}/>}</button></form></div></div></section>}
 
       {page === 'updates' && <section className="content"><Title title="Updates" subtitle="GitHub Releases remain the source of truth." action={<button className="secondary compact" onClick={()=>{checkRepo(NEXUS_REPO,['.msi','.exe']);checkRepo(NONT_REPO,['.exe']);}}><RefreshCw size={15}/> Check all</button>}/><div className="notice"><ShieldCheck size={19}/><div><strong>Web-safe updates</strong><p>The website checks compatible GitHub Release files and opens downloads. It never launches installers itself.</p></div></div><div className="update-stack"><UpdateCard name="NONT Nexus" repo={NEXUS_REPO} current={VERSION} check={releaseChecks[NEXUS_REPO]} onCheck={()=>checkRepo(NEXUS_REPO,['.msi','.exe'])}/><UpdateCard name="NONT" repo={NONT_REPO} current="Web" check={releaseChecks[NONT_REPO]} onCheck={()=>checkRepo(NONT_REPO,['.exe'])}/></div></section>}
 
-      {page === 'settings' && <section className="content"><Title title="Settings" subtitle="Appearance and cloud AI for the Nexus web build."/><SettingSection icon={<Sun size={18}/>} title="Appearance" subtitle="Choose the Nexus dark or bright theme."><div className="theme-grid"><button className={theme==='dark'?'active':''} onClick={()=>setTheme('dark')}><Moon size={19}/><strong>Dark</strong>{theme==='dark'&&<Check size={15}/>}</button><button className={theme==='bright'?'active':''} onClick={()=>setTheme('bright')}><Sun size={19}/><strong>Bright</strong>{theme==='bright'&&<Check size={15}/>}</button></div></SettingSection><SettingSection icon={<Code2 size={18}/>} title="OpenCode" subtitle="Local processes cannot run from a Vercel webpage."><div className="setting-row"><div><strong>OpenCode integration</strong><p>Available in the Windows/Tauri Nexus build.</p></div><span className="state-chip">Desktop only</span></div></SettingSection><SettingSection icon={<KeyRound size={18}/>} title="Cloud API keys" subtitle="BYOK providers for Nexus AI. Keys stay in this browser and are sent only when you make an AI request.">{providers.length>0&&<div className="provider-list">{providers.map((p)=><div className="provider-row" key={p.id}><Cloud size={17}/><div><strong>{p.name}</strong><span>{p.model}</span><small>{p.baseUrl}</small></div><span className="state-chip good">Key saved</span><button className="icon-button danger" onClick={()=>removeProvider(p.id)}><Trash2 size={15}/></button></div>)}</div>}<form className="provider-form" onSubmit={saveProvider}><label>Preset<select value={preset} onChange={(e)=>applyPreset(Number(e.target.value))}>{presets.map((p,i)=><option key={p[0]} value={i}>{p[0]}</option>)}</select></label><label>Name<input value={providerName} onChange={(e)=>setProviderName(e.target.value)}/></label><label className="wide">Base URL<input value={providerUrl} onChange={(e)=>setProviderUrl(e.target.value)}/></label><label>Model<input value={providerModel} onChange={(e)=>setProviderModel(e.target.value)} placeholder="model-name"/></label><label>API key<input type="password" value={providerKey} onChange={(e)=>setProviderKey(e.target.value)} autoComplete="off"/></label><button className="primary" type="submit"><KeyRound size={15}/> Save provider</button></form></SettingSection><SettingSection icon={<ShieldCheck size={18}/>} title="Web privacy" subtitle="This build avoids pretending the browser has desktop permissions."><div className="setting-row"><div><strong>Local app access</strong><p>Install detection, process control, tray behavior and direct EXE launch are intentionally unavailable.</p></div><span>Browser sandboxed</span></div></SettingSection></section>}
+      {page === 'settings' && <section className="content"><Title title="Settings" subtitle="Appearance and browser behavior for the Nexus web build."/><SettingSection icon={<Sun size={18}/>} title="Appearance" subtitle="Choose the Nexus dark or bright theme."><div className="theme-grid"><button className={theme==='dark'?'active':''} onClick={()=>setTheme('dark')}><Moon size={19}/><strong>Dark</strong>{theme==='dark'&&<Check size={15}/>}</button><button className={theme==='bright'?'active':''} onClick={()=>setTheme('bright')}><Sun size={19}/><strong>Bright</strong>{theme==='bright'&&<Check size={15}/>}</button></div></SettingSection><SettingSection icon={<ShieldCheck size={18}/>} title="Web privacy" subtitle="This build avoids pretending the browser has desktop permissions."><div className="setting-row"><div><strong>Local app access</strong><p>Install detection, process control, tray behavior and direct EXE launch are intentionally unavailable.</p></div><span>Browser sandboxed</span></div></SettingSection></section>}
     </main>
 
     {showAdd && <div className="modal-backdrop" onMouseDown={()=>!addBusy&&setShowAdd(false)}><form className="modal" onSubmit={addDownload} onMouseDown={(e)=>e.stopPropagation()}><div className="modal-title"><div><small>DOWNLOAD</small><h2>Add to Nexus</h2></div><button type="button" className="icon-button" onClick={()=>setShowAdd(false)}><X size={17}/></button></div><label>Direct URL or GitHub repository</label><input autoFocus value={directUrl} onChange={(e)=>setDirectUrl(e.target.value)} placeholder="https://github.com/owner/project"/><p>{githubRepo(directUrl)?`GitHub repository detected · ${githubRepo(directUrl)}`:'Paste a normal HTTPS file URL or a GitHub repository. Nexus Web opens the resolved file in your browser download flow.'}</p><button className="primary full" disabled={addBusy||!directUrl.trim()}>{addBusy?<LoaderCircle className="spin" size={17}/>:<Download size={17}/>} Resolve & download</button></form></div>}
