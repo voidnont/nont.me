@@ -6,7 +6,6 @@ One GitHub repository and one Vercel project containing both:
 - **NONT Music Web** — selected automatically on `music.nont.me`
 - **Open Web Player** button on the main Nexus homepage points to `https://music.nont.me`
 
-The music player is also available at `/music`, useful on Vercel preview URLs.
 
 ## NONT Music Web
 
