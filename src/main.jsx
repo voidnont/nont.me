@@ -43,6 +43,7 @@ async function boot() {
     const [{ default: MusicApp }] = await Promise.all([
       import('./music/MusicApp.tsx'),
       import('./music/music.css'),
+      import('./music/polish.css'),
     ]);
     mount(<MusicApp />);
     return;
@@ -53,6 +54,7 @@ async function boot() {
   const [{ default: App }] = await Promise.all([
     import('./App.jsx'),
     import('./styles.css'),
+    import('./polish.css'),
   ]);
   mount(<App />);
 }
