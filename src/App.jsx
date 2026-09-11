@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownToLine, Boxes, Check, CheckCircle2, ChevronRight,
   Download, ExternalLink, FileArchive, Home, Library,
@@ -6,10 +6,11 @@ import {
   Settings, ShieldCheck, Sun, Trash2, X,
 } from 'lucide-react';
 
-const VERSION = '0.7.2';
+const VERSION = '0.7.4';
 const NONTHUB_REPO = 'voidnont/NontHub';
 const NONTMUSIC_REPO = 'voidnont/NontMusic';
 const VEIL_REPO = 'voidnont/veilbrowser';
+const SYNC_CACHE_KEY = 'nonthub.web.github-sync.v1';
 
 const NONTHUB_LOGO = 'https://raw.githubusercontent.com/voidnont/NontHub/main/public/nonthub-logo.png';
 const NONTMUSIC_LOGO = 'https://raw.githubusercontent.com/voidnont/NontMusic/main/public/nontmusic.png';
@@ -63,11 +64,19 @@ const catalog = [
 function readJson(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key) || '') || fallback; } catch { return fallback; }
 }
+function writeJson(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage can be unavailable */ }
+}
 function formatBytes(bytes = 0) {
   if (!bytes) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB'];
   const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   return `${(bytes / 1024 ** i).toFixed(i ? 1 : 0)} ${units[i]}`;
+}
+function formatSyncTime(value) {
+  if (!value) return 'Not synced yet';
+  try { return new Date(value).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }); }
+  catch { return 'Synced'; }
 }
 function githubRepo(value) {
   try {
@@ -96,15 +105,20 @@ export default function App() {
   const [showAdd, setShowAdd] = useState(false);
   const [directUrl, setDirectUrl] = useState('');
   const [addBusy, setAddBusy] = useState(false);
-  const [repoSync, setRepoSync] = useState({});
+  const [repoSync, setRepoSync] = useState(() => readJson(SYNC_CACHE_KEY, {}));
   const [installerBusy, setInstallerBusy] = useState({});
   const [syncBusy, setSyncBusy] = useState(false);
+  const syncLockRef = useRef(false);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem('nonthub.web.theme', theme);
+    try { localStorage.setItem('nonthub.web.theme', theme); } catch { /* no-op */ }
   }, [theme]);
-  useEffect(() => localStorage.setItem('nonthub.web.downloads', JSON.stringify(downloads.slice(0, 100))), [downloads]);
+  useEffect(() => writeJson('nonthub.web.downloads', downloads.slice(0, 100)), [downloads]);
+  useEffect(() => {
+    const cacheable = Object.fromEntries(Object.entries(repoSync).map(([repo, value]) => [repo, { ...value, status: value?.status === 'checking' ? 'ready' : value?.status }]));
+    writeJson(SYNC_CACHE_KEY, cacheable);
+  }, [repoSync]);
   useEffect(() => { void syncAll(); }, []);
 
   const visibleApps = useMemo(() => {
@@ -114,27 +128,36 @@ export default function App() {
 
   async function syncOne(app) {
     if (!app?.repo) return null;
-    setRepoSync((state) => ({ ...state, [app.repo]: { ...(state[app.repo] || {}), status: 'checking' } }));
+    setRepoSync((state) => ({ ...state, [app.repo]: { ...(state[app.repo] || {}), status: 'checking', error: '' } }));
     try {
-      const data = await fetchRepoSync(app.repo);
+      const data = { ...(await fetchRepoSync(app.repo)), syncedAt: new Date().toISOString() };
       setRepoSync((state) => ({ ...state, [app.repo]: data }));
       return data;
     } catch (error) {
-      const failed = {
-        status: 'error', repo: app.repo,
-        sourceVersion: repoConfigs[app.repo]?.fallbackVersion || '',
-        error: String(error), asset: null,
-      };
-      setRepoSync((state) => ({ ...state, [app.repo]: failed }));
-      return failed;
+      const message = error instanceof Error ? error.message : String(error);
+      let failed;
+      setRepoSync((state) => {
+        failed = {
+          ...(state[app.repo] || {}),
+          status: 'error', repo: app.repo,
+          sourceVersion: state[app.repo]?.sourceVersion || repoConfigs[app.repo]?.fallbackVersion || '',
+          error: message,
+        };
+        return { ...state, [app.repo]: failed };
+      });
+      return failed || { status: 'error', repo: app.repo, sourceVersion: repoConfigs[app.repo]?.fallbackVersion || '', error: message };
     }
   }
 
   async function syncAll() {
-    if (syncBusy) return;
+    if (syncLockRef.current) return;
+    syncLockRef.current = true;
     setSyncBusy(true);
     try { await Promise.all(desktopApps.map((app) => syncOne(app))); }
-    finally { setSyncBusy(false); }
+    finally {
+      syncLockRef.current = false;
+      setSyncBusy(false);
+    }
   }
 
   function appVersion(app) {
@@ -153,7 +176,7 @@ export default function App() {
     setInstallerBusy((state) => ({ ...state, [app.repo]: true }));
     try {
       let synced = repoSync[app.repo];
-      if (!synced || synced.status !== 'ready') synced = await syncOne(app);
+      if (!synced || synced.status === 'error' || (!synced.asset && !synced.releaseUrl)) synced = await syncOne(app);
       if (synced?.asset) {
         startDownload(synced.asset);
         setDownloads((items) => [{
@@ -177,10 +200,8 @@ export default function App() {
       const repo = githubRepo(directUrl);
       let asset;
       if (repo) {
-        if (!repoConfigs[repo] && !repoConfigs[Object.keys(repoConfigs).find((key) => key.toLowerCase() === repo.toLowerCase())]) {
-          throw new Error('Only official NONT repositories can be resolved automatically here.');
-        }
-        const canonical = Object.keys(repoConfigs).find((key) => key.toLowerCase() === repo.toLowerCase()) || repo;
+        const canonical = Object.keys(repoConfigs).find((key) => key.toLowerCase() === repo.toLowerCase());
+        if (!canonical) throw new Error('Only official NONT repositories can be resolved automatically here.');
         const synced = await fetchRepoSync(canonical);
         asset = synced.asset;
         if (!asset) throw new Error('No published Windows installer is available in this repository yet.');
@@ -273,7 +294,7 @@ export default function App() {
       {page === 'settings' && <section className="content">
         <Title title="Settings" subtitle="Appearance and GitHub sync behavior for NontHub Web."/>
         <SettingSection icon={<Sun size={18}/>} title="Appearance" subtitle="Choose the NontHub dark or bright theme."><div className="theme-grid"><button className={theme==='dark'?'active':''} onClick={()=>setTheme('dark')}><Moon size={19}/><strong>Dark</strong>{theme==='dark'&&<Check size={15}/>}</button><button className={theme==='bright'?'active':''} onClick={()=>setTheme('bright')}><Sun size={19}/><strong>Bright</strong>{theme==='bright'&&<Check size={15}/>}</button></div></SettingSection>
-        <SettingSection icon={<RefreshCw size={18}/>} title="GitHub sync" subtitle="Versions and published installers come directly from each official repository."><div className="setting-row"><div><strong>Automatic sync</strong><p>The page checks NontHub, NontMusic and Veil Browser through the cached nont.me sync endpoint on load.</p></div><span>{syncBusy ? 'Syncing' : 'Enabled'}</span></div></SettingSection>
+        <SettingSection icon={<RefreshCw size={18}/>} title="GitHub sync" subtitle="Versions and published installers come directly from each official repository."><div className="setting-row"><div><strong>Automatic sync</strong><p>The page restores the last successful versions instantly, then refreshes NontHub, NontMusic and Veil Browser through the cached nont.me sync endpoint.</p></div><span>{syncBusy ? 'Syncing' : 'Enabled'}</span></div></SettingSection>
       </section>}
     </main>
 
@@ -298,7 +319,7 @@ function InstallerCard({ app, mode, sync, busy, onSync, onAction }) {
   const hasInstaller = Boolean(sync?.asset);
   const checking = sync?.status === 'checking';
   const primaryLabel = hasInstaller ? `${mode === 'install' ? 'Install' : 'Update'} ${app.name}` : 'Open releases';
-  return <article className="update-card"><span className="update-icon"><img src={app.iconUrl} alt={`${app.name} icon`}/></span><div><span className="category">GITHUB SYNCED</span><h3>{app.name}</h3><p>{app.repo}</p><div className="version-line"><span>Source</span><strong>v{version}</strong><i>→</i><span>Installer</span><strong>{releaseVersion ? `v${releaseVersion}` : 'Not published'}</strong></div>{sync?.asset&&<small className="asset-line"><FileArchive size={12}/> {sync.asset.name} · {formatBytes(sync.asset.size)}</small>}{sync?.status==='error'&&<small className="error-text">Sync failed: {sync.error}</small>}{sync?.status==='ready'&&!hasInstaller&&<small className="asset-line">No Windows installer is published in GitHub Releases yet.</small>}</div><div className="update-actions"><button className="secondary" onClick={onSync} disabled={checking||busy}><RefreshCw className={checking?'spin':''} size={15}/> Sync</button><button className="primary" onClick={onAction} disabled={checking||busy}>{busy?<LoaderCircle className="spin" size={15}/>:hasInstaller?<ArrowDownToLine size={15}/>:<ExternalLink size={15}/>} {busy?'Opening…':primaryLabel}</button></div></article>;
+  return <article className="update-card"><span className="update-icon"><img src={app.iconUrl} alt={`${app.name} icon`}/></span><div><span className="category">GITHUB SYNCED</span><h3>{app.name}</h3><p>{app.repo}</p><div className="version-line"><span>Source</span><strong>v{version}</strong><i>→</i><span>Installer</span><strong>{releaseVersion ? `v${releaseVersion}` : 'Not published'}</strong></div>{sync?.sourceAheadOfRelease&&<small className="error-text">Source v{version} is newer than the published installer. Installer stays on v{releaseVersion} until a new GitHub Release is published.</small>}{sync?.asset&&<small className="asset-line"><FileArchive size={12}/> {sync.asset.name} · {formatBytes(sync.asset.size)}</small>}{sync?.status==='error'&&<small className="error-text">Sync failed: {sync.error}</small>}{sync?.status==='ready'&&!hasInstaller&&<small className="asset-line">No Windows installer is published in GitHub Releases yet.</small>}{sync?.syncedAt&&<small className="asset-line">Last synced {formatSyncTime(sync.syncedAt)}</small>}</div><div className="update-actions"><button className="secondary" onClick={onSync} disabled={checking||busy}><RefreshCw className={checking?'spin':''} size={15}/> Sync</button><button className="primary" onClick={onAction} disabled={checking||busy}>{busy?<LoaderCircle className="spin" size={15}/>:hasInstaller?<ArrowDownToLine size={15}/>:<ExternalLink size={15}/>} {busy?'Opening…':primaryLabel}</button></div></article>;
 }
 function Empty({ onAdd }) {
   return <div className="empty"><Download size={27}/><h3>No downloads yet</h3><p>Install an app or add a direct download.</p><button className="primary" onClick={onAdd}><Plus size={16}/> Add download</button></div>;
