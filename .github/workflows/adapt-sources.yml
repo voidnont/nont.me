@@ -1,6 +1,8 @@
 name: Adapt from NONT sources
 
 on:
+  push:
+    branches: [main]
   schedule:
     - cron: '*/15 * * * *'
   workflow_dispatch:
@@ -14,6 +16,7 @@ concurrency:
 
 jobs:
   adapt:
+    if: github.event_name != 'push' || github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
