@@ -1,23 +1,27 @@
+import { contractSummary, inferSourceContract } from '../shared/source-contract.js';
+
 const REPOSITORIES = {
   'voidnont/nonthub': {
     repo: 'voidnont/NontHub',
     source: 'package.json',
     sourceType: 'package',
-    fallbackVersion: '3.0.1',
+    appSource: 'src/App.tsx',
+    adaptSource: true,
     extensions: ['.msi', '.exe'],
   },
   'voidnont/nontmusic': {
     repo: 'voidnont/NontMusic',
     source: 'package.json',
     sourceType: 'package',
-    fallbackVersion: '0.7.2',
+    appSource: 'src/App.tsx',
+    adaptSource: true,
     extensions: ['.exe', '.msi'],
   },
   'voidnont/veilbrowser': {
     repo: 'voidnont/veilbrowser',
     source: 'Cargo.toml',
     sourceType: 'cargo',
-    fallbackVersion: '0.8.0',
+    adaptSource: false,
     extensions: ['.exe', '.msi'],
   },
 };
@@ -32,11 +36,13 @@ function packageType(name = '') {
   return name.split('.').pop()?.toLowerCase() || 'file';
 }
 
+function parsePackage(text) {
+  try { return JSON.parse(text || '{}'); } catch { return {}; }
+}
+
 function parseSourceVersion(text, type) {
   if (!text) return '';
-  if (type === 'package') {
-    try { return cleanVersion(JSON.parse(text).version || ''); } catch { return ''; }
-  }
+  if (type === 'package') return cleanVersion(parsePackage(text).version || '');
   const match = text.match(/^version\s*=\s*["']([^"']+)["']/m);
   return cleanVersion(match?.[1] || '');
 }
@@ -63,7 +69,7 @@ function compareVersions(left, right) {
 function githubHeaders() {
   const headers = {
     Accept: 'application/vnd.github+json',
-    'User-Agent': 'nont.me-sync',
+    'User-Agent': 'nont.me-source-adapter',
     'X-GitHub-Api-Version': '2022-11-28',
   };
   if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
@@ -88,6 +94,14 @@ async function githubJson(url) {
     throw new Error(`GitHub returned ${response.status}${suffix}`);
   }
   return response.json();
+}
+
+async function rawText(repo, branch, path) {
+  const response = await fetchWithTimeout(
+    `https://raw.githubusercontent.com/${repo}/${encodeURIComponent(branch)}/${path}`,
+    { headers: { 'User-Agent': 'nont.me-source-adapter' } },
+  );
+  return response.ok ? response.text() : '';
 }
 
 function assetScore(asset, extensions) {
@@ -123,29 +137,51 @@ export default async function handler(req, res) {
     const meta = await githubJson(`https://api.github.com/repos/${config.repo}`);
     const branch = meta.default_branch || 'main';
 
-    const [releases, sourceResponse] = await Promise.all([
-      githubJson(`https://api.github.com/repos/${config.repo}/releases?per_page=10`),
-      fetchWithTimeout(`https://raw.githubusercontent.com/${config.repo}/${encodeURIComponent(branch)}/${config.source}`, {
-        headers: { 'User-Agent': 'nont.me-sync' },
-      }),
+    const releasesPromise = githubJson(`https://api.github.com/repos/${config.repo}/releases?per_page=10`);
+    const sourcePromise = rawText(config.repo, branch, config.source);
+    const treePromise = config.adaptSource
+      ? githubJson(`https://api.github.com/repos/${config.repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`).catch(() => null)
+      : Promise.resolve(null);
+    const appPromise = config.adaptSource && config.appSource
+      ? rawText(config.repo, branch, config.appSource).catch(() => '')
+      : Promise.resolve('');
+
+    const [releases, sourceText, tree, appSource] = await Promise.all([
+      releasesPromise,
+      sourcePromise,
+      treePromise,
+      appPromise,
     ]);
 
-    const sourceText = sourceResponse.ok ? await sourceResponse.text() : '';
-    const sourceVersion = parseSourceVersion(sourceText, config.sourceType) || config.fallbackVersion;
+    const pkg = config.sourceType === 'package' ? parsePackage(sourceText) : {};
+    const sourceVersion = parseSourceVersion(sourceText, config.sourceType);
+    const sourcePaths = Array.isArray(tree?.tree) ? tree.tree.map((entry) => entry.path).filter(Boolean) : [];
+    const contract = config.adaptSource
+      ? inferSourceContract({ repo: config.repo, pkg, sourcePaths, appSource })
+      : { version: sourceVersion, name: '', description: '', platforms: ['Windows'], capabilities: [] };
+
     const releaseList = Array.isArray(releases) ? releases.filter((release) => !release.draft) : [];
     const published = releaseList.find((release) => !release.prerelease) || releaseList[0] || null;
     const releaseVersion = cleanVersion(published?.tag_name || published?.name || '');
     const asset = pickInstaller(published?.assets || [], config.extensions.map((ext) => ext.toLowerCase()));
-    const sourceAheadOfRelease = Boolean(sourceVersion && releaseVersion && compareVersions(sourceVersion, releaseVersion) > 0);
+    const effectiveVersion = contract.version || sourceVersion;
+    const sourceAheadOfRelease = Boolean(effectiveVersion && releaseVersion && compareVersions(effectiveVersion, releaseVersion) > 0);
+    const description = contractSummary(contract) || meta.description || '';
 
     res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=600');
     return res.status(200).json({
       repo: config.repo,
       status: 'ready',
-      description: meta.description || '',
+      description,
+      packageDescription: contract.description || meta.description || '',
+      packageName: contract.name || '',
       defaultBranch: branch,
       pushedAt: meta.pushed_at || '',
-      sourceVersion,
+      sourceVersion: effectiveVersion,
+      sourceTreeSha: tree?.sha || '',
+      sourcePathsCount: sourcePaths.length,
+      platforms: contract.platforms || [],
+      capabilities: contract.capabilities || [],
       releaseVersion,
       sourceAheadOfRelease,
       releasePrerelease: Boolean(published?.prerelease),
@@ -162,10 +198,10 @@ export default async function handler(req, res) {
   } catch (error) {
     res.setHeader('Cache-Control', 'no-store');
     return res.status(502).json({
-      error: 'GitHub sync is temporarily unavailable.',
+      error: 'GitHub source sync is temporarily unavailable.',
       detail: error instanceof Error ? error.message : String(error),
       repo: config.repo,
-      sourceVersion: config.fallbackVersion,
+      sourceVersion: '',
     });
   }
 }
