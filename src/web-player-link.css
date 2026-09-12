@@ -1,0 +1,15 @@
+.top-actions > .primary.compact,
+.hero-actions > .secondary:not(.nontmusic-web-home) {
+  display: none;
+}
+
+.nontmusic-web-home {
+  text-decoration: none;
+  justify-content: center;
+}
+
+@media (max-width: 700px) {
+  .nontmusic-web-home {
+    width: 100%;
+  }
+}

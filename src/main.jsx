@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 
 function Recovery({ error }) {
@@ -30,6 +31,28 @@ function mount(element) {
   createRoot(root).render(<React.StrictMode><ErrorBoundary>{element}</ErrorBoundary></React.StrictMode>);
 }
 
+function HomeWebPlayerLink() {
+  const [target, setTarget] = React.useState(null);
+
+  React.useEffect(() => {
+    const root = document.getElementById('root');
+    if (!root) return undefined;
+    const updateTarget = () => setTarget(document.querySelector('.hero-actions'));
+    updateTarget();
+    const observer = new MutationObserver(updateTarget);
+    observer.observe(root, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
+
+  if (!target) return null;
+  return createPortal(
+    <a className="secondary nontmusic-web-home" href="https://music.nont.me">
+      Open NontMusic Web
+    </a>,
+    target,
+  );
+}
+
 async function boot() {
   const hostname = window.location.hostname.toLowerCase();
   const pathname = window.location.pathname.toLowerCase();
@@ -55,8 +78,9 @@ async function boot() {
     import('./App.jsx'),
     import('./styles.css'),
     import('./polish.css'),
+    import('./web-player-link.css'),
   ]);
-  mount(<App />);
+  mount(<><App /><HomeWebPlayerLink /></>);
 }
 
 boot().catch((error) => {
