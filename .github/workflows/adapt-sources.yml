@@ -34,7 +34,7 @@ jobs:
 
       - name: Commit source adaptation when changed
         run: |
-          if git diff --quiet -- src/App.jsx src/generated/source-manifest.json; then
+          if [ -z "$(git status --porcelain -- src/App.jsx src/generated/source-manifest.json)" ]; then
             echo "NONT sources are already synchronized."
             exit 0
           fi
