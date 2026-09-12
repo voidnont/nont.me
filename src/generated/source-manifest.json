@@ -1,0 +1,24 @@
+{
+  "voidnont/NontHub": {
+    "repo": "voidnont/NontHub",
+    "defaultBranch": "main",
+    "treeSha": "",
+    "pushedAt": "",
+    "version": "0.4.4",
+    "name": "nonthub",
+    "description": "NontHub - GitHub app hub by Void for Windows and Android.",
+    "platforms": ["Windows", "Android"],
+    "capabilities": ["Android app", "Icon fixes"]
+  },
+  "voidnont/NontMusic": {
+    "repo": "voidnont/NontMusic",
+    "defaultBranch": "main",
+    "treeSha": "",
+    "pushedAt": "",
+    "version": "0.4.2",
+    "name": "nontmusic",
+    "description": "NontMusic Windows music player",
+    "platforms": ["Windows"],
+    "capabilities": ["Lyrics", "Recommendations", "Plugins", "Localization", "Overlay player"]
+  }
+}
