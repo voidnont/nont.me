@@ -14,6 +14,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { mergeAndRankMusicResults, refineMusicMetadata } from "../shared/musicSearch.js";
 
 type Track = {
   id: string;
@@ -50,7 +51,7 @@ function decodeHtml(value: string) {
 function loadFavorites(): Track[] {
   try {
     const value = JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]");
-    return Array.isArray(value) ? value : [];
+    return Array.isArray(value) ? value.map((track) => refineMusicMetadata(track) as Track) : [];
   } catch {
     return [];
   }
@@ -273,16 +274,18 @@ export default function MusicApp() {
       const response = await fetch(`/api/youtube-search?q=${encodeURIComponent(text)}`);
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || `Search failed (${response.status}).`);
-      const tracks: Track[] = (data.items || []).map((item: Track) => ({
+      const decoded = (data.items || []).map((item: Track) => refineMusicMetadata({
         ...item,
         title: decodeHtml(item.title),
         artist: decodeHtml(item.artist),
-      }));
+      }) as Track);
+      const tracks = mergeAndRankMusicResults(decoded, text, 30) as Track[];
       setResults(tracks);
       setQueue(tracks);
       if (!tracks.length) setSearchError("No playable music results were found for that search.");
     } catch (error) {
       setResults([]);
+      setQueue([]);
       setSearchError(error instanceof Error ? error.message : String(error));
     } finally {
       setSearching(false);

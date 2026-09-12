@@ -1,3 +1,9 @@
+import {
+  buildProviderMusicQuery,
+  mergeAndRankMusicResults,
+  refineMusicMetadata,
+} from '../src/shared/musicSearch.js';
+
 let cachedClientVersion = null;
 let cachedClientVersionAt = 0;
 
@@ -7,6 +13,7 @@ const FALLBACK_CLIENT_VERSIONS = [
 ];
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36';
+const REQUEST_TIMEOUT_MS = 8000;
 
 function textOf(value) {
   if (!value) return '';
@@ -14,47 +21,6 @@ function textOf(value) {
   if (typeof value.simpleText === 'string') return value.simpleText;
   if (Array.isArray(value.runs)) return value.runs.map((run) => run?.text || '').join('');
   return '';
-}
-
-function normalize(value = '') {
-  return String(value)
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\([^)]*(official|video|audio|lyrics?|visualizer|hd|4k)[^)]*\)/g, ' ')
-    .replace(/\[[^\]]*(official|video|audio|lyrics?|visualizer|hd|4k)[^\]]*\]/g, ' ')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
-}
-
-function cleanTitle(value = '') {
-  const original = String(value).trim();
-  const clean = original
-    .replace(/\s*[\[(](?:official\s+)?(?:music\s+)?(?:video|audio|lyrics?|lyric\s+video|visualizer|hd|4k|hq|mv)[^\])]?[\])]/gi, ' ')
-    .replace(/\s*[|·•-]\s*(?:official\s+)?(?:music\s+)?(?:video|audio|lyrics?|visualizer|hd|4k|hq)\s*$/gi, ' ')
-    .replace(/\s+official\s+(?:music\s+)?(?:video|audio)\s*$/gi, ' ')
-    .replace(/\s+(?:lyrics?|lyric\s+video|visualizer)\s*$/gi, ' ')
-    .replace(/\s{2,}/g, ' ')
-    .trim();
-  return clean || original;
-}
-
-function cleanArtist(value = '') {
-  const original = String(value).trim();
-  const clean = original
-    .replace(/\s*[-–—]\s*topic\s*$/i, '')
-    .replace(/vevo\s*$/i, '')
-    .replace(/\s*[-–—]?\s*official\s+(?:artist\s+)?channel\s*$/i, '')
-    .replace(/\s{2,}/g, ' ')
-    .trim();
-  return clean || original;
-}
-
-function buildProviderMusicQuery(value) {
-  const clean = String(value || '').trim();
-  if (!clean) return clean;
-  const alreadyMusicFocused = /\b(song|songs|music|audio|lyrics?|official|album|artist|playlist|remix|instrumental|soundtrack|ep|single|radio|mix)\b/i.test(clean);
-  return alreadyMusicFocused ? clean : `${clean} song`;
 }
 
 function thumbnailOf(renderer, id) {
@@ -89,34 +55,6 @@ function officialInfo(renderer, rawArtist, title) {
   };
 }
 
-function refineMetadata(titleValue, artistValue) {
-  let title = cleanTitle(titleValue);
-  let artist = cleanArtist(artistValue);
-  const genericArtist = !artist || /^(youtube|youtube music|unknown artist)$/i.test(artist);
-  const split = title.match(/^(.{2,80}?)\s+[-–—]\s+(.{2,160})$/);
-  if (split && genericArtist) {
-    artist = cleanArtist(split[1]);
-    title = cleanTitle(split[2]);
-  } else if (split && artist && normalize(split[1]) === normalize(artist)) {
-    title = cleanTitle(split[2]);
-  }
-  return { title, artist: artist || artistValue || 'YouTube' };
-}
-
-function resultScore(item, query) {
-  const text = `${item.title} ${item.artist}`.toLowerCase();
-  const q = normalize(query);
-  let score = 0;
-  if (item.official) score += 40;
-  if (item.topic || item.vevo) score += 20;
-  if (item.titleOfficial) score += 8;
-  if (/\b(audio|lyrics?|music|song|remix|album|single)\b/i.test(text)) score += 5;
-  if (q && normalize(`${item.artist} ${item.title}`).includes(q)) score += 10;
-  if (/\b(reaction|review|interview|podcast|trailer|gameplay|tutorial|cover by|karaoke)\b/i.test(text)) score -= 25;
-  if (/\b(shorts?|tiktok|edit|fanmade|fan made)\b/i.test(text)) score -= 12;
-  return score;
-}
-
 function collectVideos(node, out, seen) {
   if (!node || out.length >= 60) return;
   if (Array.isArray(node)) {
@@ -133,7 +71,7 @@ function collectVideos(node, out, seen) {
       if (id && rawTitle && !seen.has(id)) {
         seen.add(id);
         const official = officialInfo(child, rawArtist, rawTitle);
-        const metadata = refineMetadata(rawTitle, rawArtist);
+        const metadata = refineMusicMetadata({ title: rawTitle, artist: rawArtist });
         out.push({
           id,
           title: metadata.title,
@@ -152,20 +90,6 @@ function collectVideos(node, out, seen) {
   }
 }
 
-function mergeAndRank(items, query) {
-  const deduped = new Map();
-  for (const item of items) {
-    const key = `${normalize(item.artist)}|${normalize(item.title)}`;
-    const scored = { ...item, score: resultScore(item, query) };
-    const previous = deduped.get(key);
-    if (!previous || scored.score > previous.score) deduped.set(key, scored);
-  }
-  return [...deduped.values()]
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 30)
-    .map(({ score, titleOfficial, ...item }) => item);
-}
-
 async function resolveClientVersion() {
   const now = Date.now();
   if (cachedClientVersion && now - cachedClientVersionAt < 6 * 60 * 60 * 1000) return cachedClientVersion;
@@ -174,6 +98,7 @@ async function resolveClientVersion() {
     const response = await fetch('https://www.youtube.com/', {
       headers: { 'User-Agent': USER_AGENT, 'Accept-Language': 'en-US,en;q=0.9' },
       redirect: 'follow',
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (response.ok) {
       const html = await response.text();
@@ -204,6 +129,7 @@ async function runInnerTubeSearch(query, clientVersion) {
       context: { client: { clientName: 'WEB', clientVersion, hl: 'en', gl: 'US' } },
       query,
     }),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
   if (!response.ok) throw new Error(`InnerTube returned ${response.status}`);
   return response.json();
@@ -238,7 +164,8 @@ export default async function handler(req, res) {
 
     const items = [];
     collectVideos(payload, items, new Set());
-    const results = mergeAndRank(items, q);
+    const results = mergeAndRankMusicResults(items, q, 30)
+      .map(({ titleOfficial, ...item }) => item);
 
     res.setHeader('Cache-Control', 's-maxage=180, stale-while-revalidate=600');
     return res.status(200).json({
