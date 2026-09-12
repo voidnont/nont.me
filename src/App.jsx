@@ -17,8 +17,8 @@ const NONTMUSIC_LOGO = 'https://raw.githubusercontent.com/voidnont/NontMusic/mai
 const VEIL_LOGO = 'https://raw.githubusercontent.com/voidnont/veilbrowser/main/assets/veil-glass-icon.png';
 
 const repoConfigs = {
-  [NONTHUB_REPO]: { fallbackVersion: '3.0.1' },
-  [NONTMUSIC_REPO]: { fallbackVersion: '0.7.2' },
+  [NONTHUB_REPO]: { fallbackVersion: '0.4.4' },
+  [NONTMUSIC_REPO]: { fallbackVersion: '0.4.2' },
   [VEIL_REPO]: { fallbackVersion: '0.8.0' },
 };
 
@@ -33,13 +33,13 @@ const nav = [
 const desktopApps = [
   {
     id: 'nonthub', name: 'NontHub', subtitle: 'Your NONT apps in one place.',
-    description: 'The Windows hub for NONT apps, downloads and installation.',
+    description: 'NontHub - GitHub app hub by Void for Windows and Android.',
     category: 'HUB', kind: 'github', repo: NONTHUB_REPO,
     featured: true, icon: Boxes, iconUrl: NONTHUB_LOGO,
   },
   {
     id: 'nontmusic', name: 'NontMusic', subtitle: 'Music, connected.',
-    description: 'The NONT desktop music player with the latest features from GitHub.',
+    description: 'NontMusic Windows music player',
     category: 'MUSIC', kind: 'github', repo: NONTMUSIC_REPO,
     featured: true, icon: Music2, iconUrl: NONTMUSIC_LOGO,
   },
