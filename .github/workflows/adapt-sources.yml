@@ -1,0 +1,45 @@
+name: Adapt from NONT sources
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nont-source-adapter
+  cancel-in-progress: true
+
+jobs:
+  adapt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Adapt website from NontHub and NontMusic
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/adapt-sources.mjs
+
+      - name: Commit source adaptation when changed
+        run: |
+          if git diff --quiet -- src/App.jsx src/generated/source-manifest.json; then
+            echo "NONT sources are already synchronized."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/App.jsx src/generated/source-manifest.json
+          git commit -m "chore: adapt website from NontHub and NontMusic"
+          git push
