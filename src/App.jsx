@@ -33,7 +33,7 @@ const nav = [
 const desktopApps = [
   {
     id: 'nonthub', name: 'NontHub', subtitle: 'Your NONT apps in one place.',
-    description: 'NontHub - GitHub app hub by Void for Windows and Android.',
+    description: 'NontHub for Windows by Void.',
     category: 'HUB', kind: 'github', repo: NONTHUB_REPO,
     featured: true, icon: Boxes, iconUrl: NONTHUB_LOGO,
   },
