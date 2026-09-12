@@ -2,8 +2,8 @@
   "voidnont/NontHub": {
     "repo": "voidnont/NontHub",
     "defaultBranch": "main",
-    "treeSha": "1179f1d5b626a244ee61c7a1d2f2d34f19c9566b",
-    "pushedAt": "2026-09-12T19:00:35Z",
+    "treeSha": "6ed21164a4f2bdd2f89f48c4c4fd1d79135b4644",
+    "pushedAt": "2026-09-12T19:22:51Z",
     "version": "0.4.4",
     "name": "nonthub",
     "description": "NontHub - GitHub app hub by Void for Windows and Android.",
@@ -11,14 +11,7 @@
       "Windows",
       "Android"
     ],
-    "capabilities": [
-      "Installer",
-      "Downloads",
-      "Library",
-      "Settings",
-      "Android app",
-      "Icon fixes"
-    ]
+    "capabilities": []
   },
   "voidnont/NontMusic": {
     "repo": "voidnont/NontMusic",
