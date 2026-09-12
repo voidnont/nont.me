@@ -2,8 +2,8 @@
   "voidnont/NontHub": {
     "repo": "voidnont/NontHub",
     "defaultBranch": "main",
-    "treeSha": "9362fa4387a126c230f5b2daf1a17ccaf2ba5103",
-    "pushedAt": "2026-09-12T20:52:32Z",
+    "treeSha": "96f091325b5b895b71ffac553f13f8307fb7293b",
+    "pushedAt": "2026-09-12T21:07:09Z",
     "version": "0.4.4",
     "name": "nonthub-windows",
     "description": "NontHub for Windows by Void.",
