@@ -17,9 +17,6 @@ const SOURCES = [
   },
 ];
 
-// These source repositories are public. Do not attach the nont.me Actions token to
-// cross-repository reads: that token is scoped to nont.me and can turn otherwise
-// public repository requests into 404s when it lacks access to the other repo.
 const headers = {
   Accept: 'application/vnd.github+json',
   'User-Agent': 'nont.me-adapt-sources',
@@ -93,6 +90,7 @@ function singleQuote(value) {
 }
 
 function patchApp(appText, source, contract) {
+  if (!contract?.version) return appText;
   const versionPattern = new RegExp(`(\\[${source.constant}\\]: \\{ fallbackVersion: ')[^']*(' \\})`);
   let next = appText.replace(versionPattern, `$1${singleQuote(contract.version)}$2`);
 
@@ -102,15 +100,41 @@ function patchApp(appText, source, contract) {
 }
 
 function patchFrxeWeb(musicText, contract) {
+  if (!contract?.version) return musicText;
   return musicText.replace(
     /const FRXE_SOURCE_VERSION = '[^']*';/,
     `const FRXE_SOURCE_VERSION = '${singleQuote(contract.version)}';`,
   );
 }
 
-const inspected = await Promise.all(SOURCES.map(inspectSource));
-const manifest = Object.fromEntries(inspected.map((item) => [item.repo, item]));
 const manifestPath = path.join('src', 'generated', 'source-manifest.json');
+let previousManifest = {};
+try { previousManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')); } catch { previousManifest = {}; }
+
+const inspected = await Promise.all(SOURCES.map(async (source) => {
+  try {
+    return await inspectSource(source);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`${source.repo}: source unavailable (${message}); preserving last known contract.`);
+    const previous = previousManifest[source.repo];
+    if (previous) return { ...previous, syncError: message };
+    return {
+      repo: source.repo,
+      defaultBranch: 'main',
+      treeSha: '',
+      pushedAt: '',
+      version: '',
+      name: '',
+      description: '',
+      platforms: [],
+      capabilities: [],
+      syncError: message,
+    };
+  }
+}));
+
+const manifest = Object.fromEntries(inspected.map((item) => [item.repo, item]));
 fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
 fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
@@ -125,5 +149,6 @@ music = patchFrxeWeb(music, inspected[2]);
 fs.writeFileSync(musicPath, music);
 
 for (const item of inspected) {
-  console.log(`${item.repo}: v${item.version || 'unknown'} | ${item.platforms.join(', ') || 'platform unknown'} | ${item.capabilities.join(', ') || 'no detected capabilities'}`);
+  const suffix = item.syncError ? ` | preserved: ${item.syncError}` : '';
+  console.log(`${item.repo}: v${item.version || 'unknown'} | ${item.platforms.join(', ') || 'platform unknown'} | ${item.capabilities.join(', ') || 'no detected capabilities'}${suffix}`);
 }
