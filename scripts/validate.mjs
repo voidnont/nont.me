@@ -41,6 +41,10 @@ for (const repo of ['voidnont/NontHub', 'voidnont/NontMusic', 'voidnont/veilbrow
 expect(app.includes("['installer', 'Installer'"), 'Installer must remain in navigation');
 expect(app.includes("setInstallerMode('install')"), 'Installer must retain Install mode');
 expect(app.includes("setInstallerMode('update')"), 'Installer must retain Update mode');
+expect(app.includes("const FRXE_WEB_VERSION = '"), 'Hub must expose a source-synced Frxe web version');
+expect(app.includes("id: 'frxe-web', name: 'FRXE Web'"), 'Hub library must identify music.nont.me as FRXE Web');
+expect(app.includes("iconUrl: '/frxe-icon.svg'"), 'Hub FRXE Web card must use Frxe branding');
+expect(!app.includes("id: 'nontmusic-web'"), 'legacy NontMusic Web card must stay removed');
 expect(music.includes('const FRXE_SOURCE_VERSION'), 'Frxe web player must expose its source version');
 expect(music.includes('https://github.com/voidnont/Frxe'), 'Frxe web player must link to its source repository');
 expect(music.includes("type FrxeTab = 'home' | 'search' | 'save' | 'library' | 'settings'"), 'Frxe web must keep the five source tabs');
@@ -63,7 +67,8 @@ expect(syncApi.includes('REQUEST_TIMEOUT_MS'), 'GitHub sync requests must retain
 expect(syncApi.includes('sourceAheadOfRelease'), 'source/release drift detection must remain enabled');
 expect(sourceContract.includes("key.endsWith('/frxe')"), 'source contract must understand Frxe');
 expect(sourceAdapter.includes("repo: 'voidnont/Frxe'"), 'automatic source adapter must track Frxe');
-expect(sourceAdapter.includes('patchFrxeWeb'), 'source adapter must update the Frxe web source version');
+expect(sourceAdapter.includes('patchFrxeWeb'), 'source adapter must update the Frxe player source version');
+expect(sourceAdapter.includes('patchFrxeApp'), 'source adapter must update the Frxe Hub card version');
 expect(vite.includes('sync-nont-web-version'), 'Vite must keep displayed Hub version synced with package.json');
 expect(main.includes("import('./polish.css')"), 'Hub corrective CSS must be loaded');
 expect(polish.includes('repeat(5'), 'mobile Hub navigation must retain five columns');
