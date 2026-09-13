@@ -23,8 +23,8 @@
   "voidnont/Frxe": {
     "repo": "voidnont/Frxe",
     "defaultBranch": "main",
-    "treeSha": "11c1d212d32715763d74c5827b3b4a5c77df59ce",
-    "pushedAt": "2026-09-13T20:18:22Z",
+    "treeSha": "a3b3e61b1b4021435061773007de2acca124aabf",
+    "pushedAt": "2026-09-13T20:35:30Z",
     "version": "0.5.0",
     "name": "frxe",
     "description": "FRXE liquid-glass music player",
