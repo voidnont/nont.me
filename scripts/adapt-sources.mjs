@@ -3,16 +3,20 @@ import path from 'node:path';
 import { inferSourceContract } from '../shared/source-contract.js';
 
 const SOURCES = [
-  { repo: 'voidnont/NontHub', kind: 'package', packagePath: 'package.json', appSourcePath: 'src/App.tsx', constant: 'NONTHUB_REPO', appId: 'nonthub' },
-  { repo: 'voidnont/NontMusic', kind: 'package', packagePath: 'package.json', appSourcePath: 'src/App.tsx', constant: 'NONTMUSIC_REPO', appId: 'nontmusic' },
+  {
+    repo: 'voidnont/nont',
+    kind: 'package',
+    packagePath: 'package.json',
+    appSourcePath: 'src/App.tsx',
+  },
   {
     repo: 'voidnont/Frxe',
     kind: 'frxe',
-    versionPath: 'Frxe/app/build.gradle.kts',
+    versionPath: 'app/build.gradle.kts',
     appSourcePaths: [
-      'Frxe/app/src/main/java/com/frxe/music/ui/FrxeApp.kt',
-      'Frxe/app/src/main/java/com/frxe/music/ui/screens/NowPlayingScreen.kt',
-      'Frxe/app/src/main/java/com/frxe/music/ui/screens/SearchScreen.kt',
+      'app/src/main/java/com/frxe/music/ui/FrxeApp.kt',
+      'app/src/main/java/com/frxe/music/ui/screens/NowPlayingScreen.kt',
+      'app/src/main/java/com/frxe/music/ui/screens/SearchScreen.kt',
     ],
   },
 ];
@@ -89,13 +93,28 @@ function singleQuote(value) {
   return String(value || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, ' ');
 }
 
-function patchApp(appText, source, contract) {
-  if (!contract?.version) return appText;
-  const versionPattern = new RegExp(`(\\[${source.constant}\\]: \\{ fallbackVersion: ')[^']*(' \\})`);
-  let next = appText.replace(versionPattern, `$1${singleQuote(contract.version)}$2`);
+function patchNontWeb(appText, contract) {
+  let next = appText
+    .replace(/const NONTHUB_REPO = '[^']*';/, "const NONTHUB_REPO = 'voidnont/nont';")
+    .replace(
+      /const NONTHUB_LOGO = '[^']*';/,
+      "const NONTHUB_LOGO = 'https://raw.githubusercontent.com/voidnont/nont/main/public/brand/nonthub.png';",
+    );
 
-  const descriptionPattern = new RegExp(`(id: '${source.appId}'[\\s\\S]{0,420}?description: ')[^']*(')`);
-  if (contract.description) next = next.replace(descriptionPattern, `$1${singleQuote(contract.description)}$2`);
+  if (contract?.version) {
+    next = next.replace(
+      /(\[NONTHUB_REPO\]: \{ fallbackVersion: ')[^']*(' \})/,
+      `$1${singleQuote(contract.version)}$2`,
+    );
+  }
+
+  if (contract?.description) {
+    next = next.replace(
+      /(id: 'nonthub'[\s\S]{0,420}?description: ')[^']*(')/,
+      `$1${singleQuote(contract.description)}$2`,
+    );
+  }
+
   return next;
 }
 
@@ -148,13 +167,13 @@ fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
 const appPath = path.join('src', 'App.jsx');
 let app = fs.readFileSync(appPath, 'utf8');
-for (let index = 0; index < 2; index += 1) app = patchApp(app, SOURCES[index], inspected[index]);
-app = patchFrxeApp(app, inspected[2]);
+app = patchNontWeb(app, inspected[0]);
+app = patchFrxeApp(app, inspected[1]);
 fs.writeFileSync(appPath, app);
 
 const musicPath = path.join('src', 'music', 'MusicApp.tsx');
 let music = fs.readFileSync(musicPath, 'utf8');
-music = patchFrxeWeb(music, inspected[2]);
+music = patchFrxeWeb(music, inspected[1]);
 fs.writeFileSync(musicPath, music);
 
 for (const item of inspected) {
