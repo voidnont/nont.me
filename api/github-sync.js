@@ -1,8 +1,8 @@
 import { contractSummary, inferSourceContract } from '../shared/source-contract.js';
 
 const REPOSITORIES = {
-  'voidnont/nonthub': {
-    repo: 'voidnont/NontHub',
+  'voidnont/nont': {
+    repo: 'voidnont/nont',
     source: 'package.json',
     sourceType: 'package',
     appSource: 'src/App.tsx',
@@ -16,6 +16,14 @@ const REPOSITORIES = {
     appSource: 'src/App.tsx',
     adaptSource: true,
     extensions: ['.exe', '.msi'],
+  },
+  'voidnont/frxe': {
+    repo: 'voidnont/Frxe',
+    source: 'app/build.gradle.kts',
+    sourceType: 'gradle',
+    appSource: 'app/src/main/java/com/frxe/music/ui/FrxeApp.kt',
+    adaptSource: true,
+    extensions: ['.apk'],
   },
   'voidnont/veilbrowser': {
     repo: 'voidnont/veilbrowser',
@@ -43,6 +51,7 @@ function parsePackage(text) {
 function parseSourceVersion(text, type) {
   if (!text) return '';
   if (type === 'package') return cleanVersion(parsePackage(text).version || '');
+  if (type === 'gradle') return cleanVersion(text.match(/versionName\s*=\s*["']([^"']+)["']/)?.[1] || '');
   const match = text.match(/^version\s*=\s*["']([^"']+)["']/m);
   return cleanVersion(match?.[1] || '');
 }
@@ -112,6 +121,7 @@ function assetScore(asset, extensions) {
   if (/x64|amd64|win64/.test(name)) score += 4;
   if (name.endsWith('.msi')) score += 3;
   if (name.endsWith('.exe')) score += 2;
+  if (name.endsWith('.apk')) score += 2;
   if (/portable|debug|symbols|pdb|sha|checksum/.test(name)) score -= 8;
   return score;
 }
@@ -153,8 +163,12 @@ export default async function handler(req, res) {
       appPromise,
     ]);
 
-    const pkg = config.sourceType === 'package' ? parsePackage(sourceText) : {};
     const sourceVersion = parseSourceVersion(sourceText, config.sourceType);
+    const pkg = config.sourceType === 'package'
+      ? parsePackage(sourceText)
+      : config.sourceType === 'gradle'
+        ? { version: sourceVersion, name: 'frxe', description: 'FRXE liquid-glass music player', scripts: { android: 'gradle' } }
+        : {};
     const sourcePaths = Array.isArray(tree?.tree) ? tree.tree.map((entry) => entry.path).filter(Boolean) : [];
     const contract = config.adaptSource
       ? inferSourceContract({ repo: config.repo, pkg, sourcePaths, appSource })
