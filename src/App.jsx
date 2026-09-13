@@ -10,6 +10,7 @@ const VERSION = '0.7.4';
 const NONTHUB_REPO = 'voidnont/NontHub';
 const NONTMUSIC_REPO = 'voidnont/NontMusic';
 const VEIL_REPO = 'voidnont/veilbrowser';
+const FRXE_WEB_VERSION = '0.4.6';
 const SYNC_CACHE_KEY = 'nonthub.web.github-sync.v1';
 
 const NONTHUB_LOGO = 'https://raw.githubusercontent.com/voidnont/NontHub/main/public/nonthub-logo.png';
@@ -54,10 +55,10 @@ const desktopApps = [
 const catalog = [
   ...desktopApps,
   {
-    id: 'nontmusic-web', name: 'NontMusic Web', subtitle: 'Play in your browser.',
-    description: 'Open the browser version of NontMusic at music.nont.me.',
-    category: 'MUSIC', kind: 'web', route: 'https://music.nont.me',
-    featured: true, icon: Music2, iconUrl: NONTMUSIC_LOGO, versionRepo: NONTMUSIC_REPO,
+    id: 'frxe-web', name: 'FRXE Web', subtitle: 'Liquid sound in your browser.',
+    description: 'The browser version of FRXE at music.nont.me.',
+    category: 'MUSIC', kind: 'web', route: 'https://music.nont.me', version: FRXE_WEB_VERSION,
+    featured: true, icon: Music2, iconUrl: '/frxe-icon.svg',
   },
 ];
 
@@ -161,6 +162,7 @@ export default function App() {
   }
 
   function appVersion(app) {
+    if (app.version) return app.version;
     const repo = app.repo || app.versionRepo;
     return repoSync[repo]?.sourceVersion || repoConfigs[repo]?.fallbackVersion || VERSION;
   }
@@ -251,7 +253,7 @@ export default function App() {
           <div>
             <div className="eyebrow"><i/> NONT ECOSYSTEM · v{VERSION}</div>
             <h1>Your apps.<br/><em>One signal.</em></h1>
-            <p>NontHub keeps NontMusic and Veil Browser connected to their GitHub source, with one place to install the latest published Windows builds.</p>
+            <p>NontHub keeps NontMusic, FRXE Web and Veil Browser connected to their source, with one place for the web player and the latest published desktop builds.</p>
             <div className="hero-actions">
               <button className="primary" onClick={() => setPage('library')}><Boxes size={18}/> Open library</button>
               <button className="secondary" onClick={() => { setInstallerMode('install'); setPage('installer'); }}><PackageOpen size={18}/> Open installer</button>
@@ -272,7 +274,7 @@ export default function App() {
       </section>}
 
       {page === 'library' && <section className="content">
-        <Title title="Library" subtitle="NontHub, NontMusic and Veil Browser stay synced with their GitHub repositories."/>
+        <Title title="Library" subtitle="NontHub, NontMusic, FRXE Web and Veil Browser stay connected to their source projects."/>
         <div className="app-grid all">{visibleApps.map((app)=><AppCard key={app.id} app={app} version={appVersion(app)} sync={repoSync[app.repo || app.versionRepo]} onOpen={()=>openApp(app)}/>)}</div>
       </section>}
 
