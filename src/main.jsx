@@ -2,6 +2,8 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 
+const NONT_ICON = 'https://raw.githubusercontent.com/voidnont/nont/main/src-tauri/icons/icon.png';
+
 function Recovery({ error }) {
   const message = error instanceof Error ? error.message : String(error || 'Unknown error');
   return <main style={{minHeight:'100vh',display:'grid',placeItems:'center',background:'#090909',color:'#f4f4f4',fontFamily:'Inter,system-ui,sans-serif',padding:'24px'}}>
@@ -46,7 +48,7 @@ function HomeWebPlayerLink() {
 
   if (!target) return null;
   return createPortal(
-    <a className="secondary nontmusic-web-home" href="https://music.nont.me">
+    <a className="secondary frxe-web-home" href="https://music.nont.me">
       Open FRXE Web Player
     </a>,
     target,
@@ -72,7 +74,7 @@ async function boot() {
   }
 
   document.title = 'NontHub';
-  favicon.href = 'https://raw.githubusercontent.com/voidnont/NontHub/main/public/nonthub-logo.png';
+  favicon.href = NONT_ICON;
   const [{ default: App }] = await Promise.all([
     import('./App.jsx'),
     import('./styles.css'),

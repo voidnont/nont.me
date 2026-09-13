@@ -1,10 +1,12 @@
 import { expect, test } from '@playwright/test';
 
-function repoPayload(repo) {
+const NONT_ICON = 'https://raw.githubusercontent.com/voidnont/nont/main/src-tauri/icons/icon.png';
+
+function repoPayload(repo, fresh = false) {
   const versions = {
-    'voidnont/NontHub': '0.4.4',
-    'voidnont/NontMusic': '0.4.2',
-    'voidnont/veilbrowser': '0.8.0',
+    'voidnont/nont': fresh ? '9.9.8' : '0.4.4',
+    'voidnont/Frxe': fresh ? '9.9.9' : '0.5.0',
+    'voidnont/veilbrowser': fresh ? '9.9.7' : '0.8.0',
   };
   const version = versions[repo] || '1.0.0';
   return {
@@ -26,11 +28,13 @@ function repoPayload(repo) {
   };
 }
 
-async function mockHubApis(page) {
+async function mockHubApis(page, seen = []) {
   await page.route('**/api/github-sync?repo=*', async (route) => {
     const url = new URL(route.request().url());
-    const repo = url.searchParams.get('repo') || 'voidnont/NontHub';
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(repoPayload(repo)) });
+    const repo = url.searchParams.get('repo') || 'voidnont/nont';
+    const fresh = url.searchParams.get('fresh') === '1';
+    seen.push(url);
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(repoPayload(repo, fresh)) });
   });
 }
 
@@ -49,6 +53,45 @@ test('Hub exposes Installer with Install and Update modes', async ({ page }) => 
   await expect(page.getByRole('tab', { name: 'Update' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByText('Update your current installation')).toBeVisible();
   await expect(page.getByRole('button', { name: /Update NontHub/i })).toBeVisible();
+});
+
+test('catalog contains only NontHub, Frxe Web, and Veil while the sidebar has no mini-card', async ({ page }) => {
+  await mockHubApis(page);
+  await page.goto('/');
+
+  await expect(page.locator('.sidebar-bottom .mini')).toHaveCount(0);
+  await expect(page.locator('.app-card')).toHaveCount(3);
+  await expect(page.getByRole('heading', { name: 'NontHub' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'FRXE Web' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Veil Browser' })).toBeVisible();
+
+  await page.locator('.sidebar nav').getByRole('button', { name: 'Library' }).click();
+  await expect(page.locator('.app-card')).toHaveCount(3);
+  await expect(page.getByRole('heading', { name: 'Veil Browser' })).toBeVisible();
+});
+
+test('manual GitHub sync force-refreshes Nont, Frxe, and Veil including Frxe Web version', async ({ page }) => {
+  const seen = [];
+  await mockHubApis(page, seen);
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'FRXE Web' })).toBeVisible();
+
+  seen.length = 0;
+  await page.getByRole('button', { name: 'Sync GitHub' }).click();
+
+  await expect.poll(() => seen
+    .filter((url) => url.searchParams.get('fresh') === '1')
+    .map((url) => url.searchParams.get('repo'))
+    .sort()).toEqual(['voidnont/Frxe', 'voidnont/nont', 'voidnont/veilbrowser']);
+
+  const frxeCard = page.locator('.app-card', { has: page.getByRole('heading', { name: 'FRXE Web' }) });
+  await expect(frxeCard).toContainText('v9.9.9');
+});
+
+test('Nont browser uses the canonical Nont app icon', async ({ page }) => {
+  await mockHubApis(page);
+  await page.goto('/');
+  await expect(page.locator('link[rel="icon"]')).toHaveAttribute('href', NONT_ICON);
 });
 
 test('mobile Hub navigation contains exactly five destinations', async ({ page }) => {

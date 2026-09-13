@@ -13,7 +13,7 @@ test('provider query quietly adds music intent', () => {
   assert.equal(buildProviderMusicQuery('The Weeknd Blinding Lights official audio'), 'The Weeknd Blinding Lights official audio');
 });
 
-test('metadata cleanup mirrors desktop NontMusic behavior', () => {
+test('metadata cleanup normalizes provider labels and titles', () => {
   assert.equal(cleanArtistName('Artist - Topic'), 'Artist');
   assert.equal(cleanArtistName('ArtistVEVO'), 'Artist');
   assert.equal(cleanDisplayTitle('Artist - Signal (Official Video)'), 'Artist - Signal');
