@@ -27,6 +27,9 @@ const vite = read('vite.config.js');
 const vercel = read('vercel.json');
 const index = read('index.html');
 const polish = read('src/polish.css');
+const webPlayerLink = read('src/web-player-link.css');
+const retiredMusicApp = ['Nont', 'Music'].join('');
+const nontIconUrl = 'https://raw.githubusercontent.com/voidnont/nont/main/src-tauri/icons/icon.png';
 
 expect(pkg.version === versionFile, `package.json (${pkg.version}) and VERSION (${versionFile}) must match`);
 expect(!fs.existsSync('api/search.js'), 'obsolete api/search.js must stay removed');
@@ -35,30 +38,47 @@ expect(!app.includes("'web-search'"), 'Web Search navigation must stay removed')
 expect(!app.includes("page === 'updates'"), 'legacy Updates page must stay removed');
 expect(!app.includes('voidnont/NONT-Nexus'), 'legacy NONT-Nexus repository reference must stay removed');
 
+for (const [label, text] of [
+  ['Hub app', app],
+  ['boot loader', main],
+  ['GitHub sync API', syncApi],
+  ['source contract', sourceContract],
+  ['source adapter', sourceAdapter],
+  ['public HTML', index],
+  ['web-player link CSS', webPlayerLink],
+  ['unit tests', unit],
+  ['browser tests', e2e],
+]) {
+  expect(!text.toLowerCase().includes(retiredMusicApp.toLowerCase()), `${label} must not retain the retired desktop music app association`);
+}
+
 expect(sourceAdapter.includes("repo: 'voidnont/nont'"), 'nont.me source adapter must track voidnont/nont');
 expect(sourceAdapter.includes("repo: 'voidnont/Frxe'"), 'music.nont.me source adapter must track voidnont/Frxe');
 expect(!sourceAdapter.includes("repo: 'voidnont/NontHub'"), 'NontHub must not remain a website source-of-truth');
-expect(!sourceAdapter.includes("repo: 'voidnont/NontMusic'"), 'NontMusic must not remain a website source-of-truth');
 expect(sourceAdapter.includes("versionPath: 'app/build.gradle.kts'"), 'Frxe adapter must use the current repository layout');
 expect(sourceAdapter.includes('patchNontWeb'), 'source adapter must map nont.me to voidnont/nont');
 expect(sourceAdapter.includes('patchFrxeWeb'), 'source adapter must update the Frxe player source version');
-expect(sourceAdapter.includes('patchFrxeApp'), 'source adapter must update the Frxe Hub card version');
+expect(sourceAdapter.includes('patchFrxeApp'), 'source adapter must update the Frxe Hub card fallback version');
 
 const sourceKeys = Object.keys(sourceManifest).sort();
 expect(JSON.stringify(sourceKeys) === JSON.stringify(['voidnont/Frxe', 'voidnont/nont']), 'generated manifest must contain only voidnont/nont and voidnont/Frxe');
 expect(syncApi.includes("'voidnont/nont':"), 'GitHub sync API must allow voidnont/nont');
 expect(syncApi.includes("'voidnont/frxe':"), 'GitHub sync API must allow voidnont/Frxe');
-expect(!syncApi.includes("'voidnont/nonthub':"), 'GitHub sync API must stop using voidnont/NontHub as the nont.me source');
-expect(syncApi.includes('voidnont/NontMusic'), 'desktop NontMusic downloads may remain available');
 expect(syncApi.includes('voidnont/veilbrowser'), 'Veil desktop downloads must remain available');
+expect(syncApi.includes("String(req.query?.fresh || '') === '1'"), 'GitHub sync API must understand manual fresh requests');
+expect(syncApi.includes("fresh ? 'private, no-store, max-age=0'"), 'manual GitHub sync must bypass edge response caching');
 
 expect(app.includes("['installer', 'Installer'"), 'Installer must remain in navigation');
 expect(app.includes("setInstallerMode('install')"), 'Installer must retain Install mode');
 expect(app.includes("setInstallerMode('update')"), 'Installer must retain Update mode');
-expect(app.includes("const FRXE_WEB_VERSION = '"), 'Hub must expose a source-synced Frxe web version');
+expect(app.includes("const FRXE_WEB_VERSION = '"), 'Hub must retain a source-adapter fallback Frxe web version');
+expect(app.includes("const FRXE_REPO = 'voidnont/Frxe'"), 'Hub must sync Frxe directly from its source repo');
 expect(app.includes("id: 'frxe-web', name: 'FRXE Web'"), 'Hub library must identify music.nont.me as FRXE Web');
+expect(app.includes('repo: FRXE_REPO'), 'Frxe Web must participate in live GitHub sync');
+expect(app.includes("params.set('fresh', '1')"), 'manual Hub sync must issue a fresh request');
+expect(app.includes('syncTargets.map'), 'Hub sync must include all configured sync targets');
+expect(!app.includes('className="mini"'), 'sidebar bottom must not render the Veil mini-card');
 expect(app.includes("iconUrl: '/frxe-icon.svg'"), 'Hub FRXE Web card must use Frxe branding');
-expect(!app.includes("id: 'nontmusic-web'"), 'legacy NontMusic Web card must stay removed');
 expect(music.includes('const FRXE_SOURCE_VERSION'), 'Frxe web player must expose its source version');
 expect(music.includes('https://github.com/voidnont/Frxe'), 'Frxe web player must link to its source repository');
 expect(music.includes("type FrxeTab = 'home' | 'search' | 'save' | 'library' | 'settings'"), 'Frxe web must keep the five source tabs');
@@ -68,6 +88,8 @@ expect(music.includes('NOW PLAYING'), 'Frxe web must keep the full player');
 expect(music.includes('Save direct media'), 'Frxe web must keep browser-safe Save');
 expect(main.includes("document.title = 'FRXE'"), 'music.nont.me must identify as FRXE');
 expect(main.includes('Open FRXE Web Player'), 'NontHub homepage must link to the FRXE web player');
+expect(main.includes(`const NONT_ICON = '${nontIconUrl}'`), 'nont.me boot must use the canonical Nont app icon');
+expect(index.includes(`<link rel="icon" href="${nontIconUrl}" />`), 'public HTML must declare the canonical Nont favicon');
 expect(fs.existsSync('public/frxe-icon.svg'), 'Frxe favicon must exist');
 expect(frxeIcon.includes('viewBox="0 0 108 108"'), 'Frxe web icon must keep the Android launcher viewport');
 expect(frxeIcon.includes('fill="#09090B"') && frxeIcon.includes('M0,0h108v108h-108z'), 'Frxe web icon must keep the launcher background');
@@ -101,6 +123,9 @@ expect(pkg.scripts?.['test:e2e'], 'browser E2E tests must remain runnable');
 expect(pkg.scripts?.['adapt:sources'], 'source adapter command must remain runnable');
 expect(playwright.includes("testDir: './tests/e2e'"), 'Playwright must target the E2E suite');
 expect(e2e.includes('Hub exposes Installer'), 'E2E suite must cover the Installer');
+expect(e2e.includes('catalog contains only NontHub, Frxe Web, and Veil'), 'E2E suite must cover the cleaned Hub catalog');
+expect(e2e.includes('manual GitHub sync force-refreshes'), 'E2E suite must cover fresh manual sync');
+expect(e2e.includes('canonical Nont app icon'), 'E2E suite must cover Nont favicon branding');
 expect(e2e.includes('mobile Hub navigation contains exactly five'), 'E2E suite must cover mobile navigation');
 expect(e2e.includes('Frxe web player mirrors'), 'E2E suite must cover the Frxe web player');
 expect(unit.includes('duplicate versions collapse'), 'unit suite must cover duplicate merging');

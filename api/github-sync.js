@@ -9,14 +9,6 @@ const REPOSITORIES = {
     adaptSource: true,
     extensions: ['.msi', '.exe'],
   },
-  'voidnont/nontmusic': {
-    repo: 'voidnont/NontMusic',
-    source: 'package.json',
-    sourceType: 'package',
-    appSource: 'src/App.tsx',
-    adaptSource: true,
-    extensions: ['.exe', '.msi'],
-  },
   'voidnont/frxe': {
     repo: 'voidnont/Frxe',
     source: 'app/build.gradle.kts',
@@ -140,6 +132,7 @@ export default async function handler(req, res) {
   }
 
   const requested = String(req.query?.repo || '').trim().toLowerCase();
+  const fresh = String(req.query?.fresh || '') === '1';
   const config = REPOSITORIES[requested];
   if (!config) return res.status(400).json({ error: 'Unsupported repository.' });
 
@@ -182,7 +175,8 @@ export default async function handler(req, res) {
     const sourceAheadOfRelease = Boolean(effectiveVersion && releaseVersion && compareVersions(effectiveVersion, releaseVersion) > 0);
     const description = contractSummary(contract) || meta.description || '';
 
-    res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=600');
+    res.setHeader('Cache-Control', fresh ? 'private, no-store, max-age=0' : 's-maxage=120, stale-while-revalidate=600');
+    if (fresh) res.setHeader('Pragma', 'no-cache');
     return res.status(200).json({
       repo: config.repo,
       status: 'ready',

@@ -37,19 +37,6 @@ export function inferSourceContract({ repo, pkg = {}, sourcePaths = [], appSourc
     if (hasPath(sourcePaths, 'src/icon-fixes.css')) capabilities.push('Icon fixes');
   }
 
-  if (key.endsWith('/nontmusic')) {
-    if (hasPath(sourcePaths, 'src/lyrics.ts')) capabilities.push('Lyrics');
-    if (hasPath(sourcePaths, 'src/recommendations.ts')) capabilities.push('Recommendations');
-    if (hasPath(sourcePaths, 'src/plugins.ts')) capabilities.push('Plugins');
-    if (hasPath(sourcePaths, 'src/i18n.ts')) capabilities.push('Localization');
-    if (hasPath(sourcePaths, 'src/overlay.tsx')) capabilities.push('Overlay player');
-    if (/\bqueue\b/i.test(appSource)) capabilities.push('Queue');
-    if (/\bdownload/i.test(appSource)) capabilities.push('Downloads');
-    if (/\bcrossfade\b/i.test(appSource)) capabilities.push('Crossfade');
-    if (/\bshuffle\b/i.test(appSource)) capabilities.push('Shuffle');
-    if (/\brepeat\b/i.test(appSource)) capabilities.push('Repeat');
-  }
-
   if (key.endsWith('/frxe')) {
     if (hasAnyPath(sourcePaths,
       'app/src/main/java/com/frxe/music/ui/components/Glass.kt',

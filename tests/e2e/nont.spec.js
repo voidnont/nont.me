@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+const NONT_ICON = 'https://raw.githubusercontent.com/voidnont/nont/main/src-tauri/icons/icon.png';
+
 function repoPayload(repo, fresh = false) {
   const versions = {
     'voidnont/nont': fresh ? '9.9.8' : '0.4.4',
@@ -53,16 +55,19 @@ test('Hub exposes Installer with Install and Update modes', async ({ page }) => 
   await expect(page.getByRole('button', { name: /Update NontHub/i })).toBeVisible();
 });
 
-test('NontMusic is absent while Veil remains in Library without a sidebar mini-card', async ({ page }) => {
+test('catalog contains only NontHub, Frxe Web, and Veil while the sidebar has no mini-card', async ({ page }) => {
   await mockHubApis(page);
   await page.goto('/');
 
-  await expect(page.getByText('NontMusic', { exact: false })).toHaveCount(0);
   await expect(page.locator('.sidebar-bottom .mini')).toHaveCount(0);
+  await expect(page.locator('.app-card')).toHaveCount(3);
+  await expect(page.getByRole('heading', { name: 'NontHub' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'FRXE Web' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Veil Browser' })).toBeVisible();
 
   await page.locator('.sidebar nav').getByRole('button', { name: 'Library' }).click();
+  await expect(page.locator('.app-card')).toHaveCount(3);
   await expect(page.getByRole('heading', { name: 'Veil Browser' })).toBeVisible();
-  await expect(page.getByText('NontMusic', { exact: false })).toHaveCount(0);
 });
 
 test('manual GitHub sync force-refreshes Nont, Frxe, and Veil including Frxe Web version', async ({ page }) => {
@@ -86,7 +91,7 @@ test('manual GitHub sync force-refreshes Nont, Frxe, and Veil including Frxe Web
 test('Nont browser uses the canonical Nont app icon', async ({ page }) => {
   await mockHubApis(page);
   await page.goto('/');
-  await expect(page.locator('link[rel="icon"]')).toHaveAttribute('href', '/nont-icon.png');
+  await expect(page.locator('link[rel="icon"]')).toHaveAttribute('href', NONT_ICON);
 });
 
 test('mobile Hub navigation contains exactly five destinations', async ({ page }) => {
