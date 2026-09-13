@@ -29,7 +29,7 @@ jobs:
         with:
           node-version: 22
 
-      - name: Adapt website from NontHub, NontMusic and Frxe
+      - name: Adapt website from Nont and Frxe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/adapt-sources.mjs
@@ -37,11 +37,11 @@ jobs:
       - name: Commit source adaptation when changed
         run: |
           if [ -z "$(git status --porcelain -- src/App.jsx src/music/MusicApp.tsx src/generated/source-manifest.json)" ]; then
-            echo "NONT sources are already synchronized."
+            echo "Nont and Frxe sources are already synchronized."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/App.jsx src/music/MusicApp.tsx src/generated/source-manifest.json
-          git commit -m "chore: adapt website from NontHub, NontMusic and Frxe"
+          git commit -m "chore: adapt website from Nont and Frxe"
           git push
