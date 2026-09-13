@@ -100,8 +100,11 @@ test('Frxe web player mirrors the five-tab app shell and music ranking', async (
   await expect(page.getByRole('heading', { name: 'FRXE' })).toBeVisible();
 
   const nav = page.locator('.frxe-nav');
-  await expect(nav.getByRole('button')).toHaveCount(5);
-  await expect(nav).toContainText(['Home', 'Search', 'Save', 'Library', 'Settings']);
+  const navButtons = nav.getByRole('button');
+  await expect(navButtons).toHaveCount(5);
+  for (const label of ['Home', 'Search', 'Save', 'Library', 'Settings']) {
+    await expect(nav.getByRole('button', { name: label })).toBeVisible();
+  }
 
   await nav.getByRole('button', { name: 'Search' }).click();
   const search = page.getByRole('textbox', { name: 'Search Frxe' });
