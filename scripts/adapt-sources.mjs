@@ -99,6 +99,14 @@ function patchApp(appText, source, contract) {
   return next;
 }
 
+function patchFrxeApp(appText, contract) {
+  if (!contract?.version) return appText;
+  return appText.replace(
+    /const FRXE_WEB_VERSION = '[^']*';/,
+    `const FRXE_WEB_VERSION = '${singleQuote(contract.version)}';`,
+  );
+}
+
 function patchFrxeWeb(musicText, contract) {
   if (!contract?.version) return musicText;
   return musicText.replace(
@@ -141,6 +149,7 @@ fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 const appPath = path.join('src', 'App.jsx');
 let app = fs.readFileSync(appPath, 'utf8');
 for (let index = 0; index < 2; index += 1) app = patchApp(app, SOURCES[index], inspected[index]);
+app = patchFrxeApp(app, inspected[2]);
 fs.writeFileSync(appPath, app);
 
 const musicPath = path.join('src', 'music', 'MusicApp.tsx');
