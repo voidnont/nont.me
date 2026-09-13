@@ -18,8 +18,7 @@
       "Updates",
       "Settings",
       "Icon fixes"
-    ],
-    "syncError": "https://api.github.com/repos/voidnont/nont returned 504"
+    ]
   },
   "voidnont/Frxe": {
     "repo": "voidnont/Frxe",
@@ -45,7 +44,6 @@
       "Cast",
       "Android Auto",
       "Queue"
-    ],
-    "syncError": "https://api.github.com/repos/voidnont/Frxe/git/trees/main?recursive=1 returned 504"
+    ]
   }
 }
