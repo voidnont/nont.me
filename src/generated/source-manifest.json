@@ -16,7 +16,8 @@
       "Library",
       "Settings",
       "Icon fixes"
-    ]
+    ],
+    "syncError": "https://api.github.com/repos/voidnont/NontHub returned 404"
   },
   "voidnont/NontMusic": {
     "repo": "voidnont/NontMusic",
@@ -40,6 +41,32 @@
       "Crossfade",
       "Shuffle",
       "Repeat"
+    ]
+  },
+  "voidnont/Frxe": {
+    "repo": "voidnont/Frxe",
+    "defaultBranch": "main",
+    "treeSha": "91f0c427afea649c252898bbf0aeef8833d7fa88",
+    "pushedAt": "2026-09-13T00:04:37Z",
+    "version": "0.4.6",
+    "name": "frxe",
+    "description": "FRXE liquid-glass music player",
+    "platforms": [
+      "Android"
+    ],
+    "capabilities": [
+      "Liquid Glass",
+      "Home",
+      "Search",
+      "Save",
+      "Library",
+      "Now Playing",
+      "Lyrics",
+      "Listen Together",
+      "Voice",
+      "Cast",
+      "Android Auto",
+      "Queue"
     ]
   }
 }
