@@ -2,8 +2,8 @@
   "voidnont/nont": {
     "repo": "voidnont/nont",
     "defaultBranch": "main",
-    "treeSha": "a3c2659e7b906bcca381b5c9ec82a393b52d369e",
-    "pushedAt": "2026-09-13T17:52:09Z",
+    "treeSha": "1f1ff2964faf62957d8aeffb55d1f01e849df984",
+    "pushedAt": "2026-09-13T17:53:30Z",
     "version": "0.4.4",
     "name": "nont",
     "description": "Nont - open app and download hub by Void for Windows and Android.",
