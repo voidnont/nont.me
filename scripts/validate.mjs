@@ -16,6 +16,7 @@ const syncApi = read('api/github-sync.js');
 const sharedMusic = read('src/shared/musicSearch.js');
 const sourceContract = read('shared/source-contract.js');
 const sourceAdapter = read('scripts/adapt-sources.mjs');
+const sourceManifest = JSON.parse(read('src/generated/source-manifest.json'));
 const playwright = read('playwright.config.js');
 const e2e = read('tests/e2e/nont.spec.js');
 const unit = read('tests/unit/musicSearch.test.mjs');
@@ -34,10 +35,22 @@ expect(!app.includes("'web-search'"), 'Web Search navigation must stay removed')
 expect(!app.includes("page === 'updates'"), 'legacy Updates page must stay removed');
 expect(!app.includes('voidnont/NONT-Nexus'), 'legacy NONT-Nexus repository reference must stay removed');
 
-for (const repo of ['voidnont/NontHub', 'voidnont/NontMusic', 'voidnont/veilbrowser']) {
-  expect(app.includes(repo), `App must stay connected to ${repo}`);
-  expect(syncApi.includes(repo), `GitHub sync API must allow ${repo}`);
-}
+expect(sourceAdapter.includes("repo: 'voidnont/nont'"), 'nont.me source adapter must track voidnont/nont');
+expect(sourceAdapter.includes("repo: 'voidnont/Frxe'"), 'music.nont.me source adapter must track voidnont/Frxe');
+expect(!sourceAdapter.includes("repo: 'voidnont/NontHub'"), 'NontHub must not remain a website source-of-truth');
+expect(!sourceAdapter.includes("repo: 'voidnont/NontMusic'"), 'NontMusic must not remain a website source-of-truth');
+expect(sourceAdapter.includes("versionPath: 'app/build.gradle.kts'"), 'Frxe adapter must use the current repository layout');
+expect(sourceAdapter.includes('patchNontWeb'), 'source adapter must map nont.me to voidnont/nont');
+expect(sourceAdapter.includes('patchFrxeWeb'), 'source adapter must update the Frxe player source version');
+expect(sourceAdapter.includes('patchFrxeApp'), 'source adapter must update the Frxe Hub card version');
+
+const sourceKeys = Object.keys(sourceManifest).sort();
+expect(JSON.stringify(sourceKeys) === JSON.stringify(['voidnont/Frxe', 'voidnont/nont']), 'generated manifest must contain only voidnont/nont and voidnont/Frxe');
+expect(syncApi.includes("'voidnont/nont':"), 'GitHub sync API must allow voidnont/nont');
+expect(syncApi.includes("'voidnont/frxe':"), 'GitHub sync API must allow voidnont/Frxe');
+expect(!syncApi.includes("'voidnont/nonthub':"), 'GitHub sync API must stop using voidnont/NontHub as the nont.me source');
+expect(syncApi.includes('voidnont/NontMusic'), 'desktop NontMusic downloads may remain available');
+expect(syncApi.includes('voidnont/veilbrowser'), 'Veil desktop downloads must remain available');
 
 expect(app.includes("['installer', 'Installer'"), 'Installer must remain in navigation');
 expect(app.includes("setInstallerMode('install')"), 'Installer must retain Install mode');
@@ -70,10 +83,9 @@ expect(sharedMusic.includes('refineMusicMetadata'), 'shared music module must ke
 expect(searchApi.includes('REQUEST_TIMEOUT_MS'), 'music search requests must retain a timeout');
 expect(syncApi.includes('REQUEST_TIMEOUT_MS'), 'GitHub sync requests must retain a timeout');
 expect(syncApi.includes('sourceAheadOfRelease'), 'source/release drift detection must remain enabled');
+expect(sourceContract.includes("key.endsWith('/nont')"), 'source contract must understand voidnont/nont');
 expect(sourceContract.includes("key.endsWith('/frxe')"), 'source contract must understand Frxe');
-expect(sourceAdapter.includes("repo: 'voidnont/Frxe'"), 'automatic source adapter must track Frxe');
-expect(sourceAdapter.includes('patchFrxeWeb'), 'source adapter must update the Frxe player source version');
-expect(sourceAdapter.includes('patchFrxeApp'), 'source adapter must update the Frxe Hub card version');
+expect(sourceContract.includes("'app/src/main/java/com/frxe/music"), 'source contract must understand the current Frxe app layout');
 expect(vite.includes('sync-nont-web-version'), 'Vite must keep displayed Hub version synced with package.json');
 expect(main.includes("import('./polish.css')"), 'Hub corrective CSS must be loaded');
 expect(polish.includes('repeat(5'), 'mobile Hub navigation must retain five columns');
@@ -92,11 +104,13 @@ expect(e2e.includes('Hub exposes Installer'), 'E2E suite must cover the Installe
 expect(e2e.includes('mobile Hub navigation contains exactly five'), 'E2E suite must cover mobile navigation');
 expect(e2e.includes('Frxe web player mirrors'), 'E2E suite must cover the Frxe web player');
 expect(unit.includes('duplicate versions collapse'), 'unit suite must cover duplicate merging');
+expect(sourceUnit.includes('Nont contract follows voidnont/nont'), 'unit suite must cover the nont.me source mapping');
 expect(sourceUnit.includes('Frxe contract follows'), 'unit suite must cover Frxe source adaptation');
 expect(ci.includes('npm run test:unit'), 'CI must run unit tests');
 expect(ci.includes('playwright install --with-deps chromium'), 'CI must install Chromium');
 expect(ci.includes('npm run test:e2e:ci'), 'CI must run browser E2E tests');
 expect(adaptWorkflow.includes("cron: '*/15 * * * *'"), 'source adapter must keep the 15-minute safety sync');
+expect(adaptWorkflow.includes('Adapt website from Nont and Frxe'), 'source adapter workflow must identify the two source repositories');
 expect(adaptWorkflow.includes('node scripts/adapt-sources.mjs'), 'source adapter workflow must run the adapter');
 
 if (process.exitCode) process.exit(process.exitCode);
