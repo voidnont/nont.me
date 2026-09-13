@@ -17,12 +17,14 @@ const SOURCES = [
   },
 ];
 
+// These source repositories are public. Do not attach the nont.me Actions token to
+// cross-repository reads: that token is scoped to nont.me and can turn otherwise
+// public repository requests into 404s when it lacks access to the other repo.
 const headers = {
   Accept: 'application/vnd.github+json',
   'User-Agent': 'nont.me-adapt-sources',
   'X-GitHub-Api-Version': '2022-11-28',
 };
-if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
 
 async function text(url, options = {}) {
   const response = await fetch(url, options);
