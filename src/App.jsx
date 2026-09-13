@@ -10,7 +10,7 @@ const VERSION = '0.7.4';
 const NONTHUB_REPO = 'voidnont/nont';
 const NONTMUSIC_REPO = 'voidnont/NontMusic';
 const VEIL_REPO = 'voidnont/veilbrowser';
-const FRXE_WEB_VERSION = '0.4.12';
+const FRXE_WEB_VERSION = '0.5.0';
 const SYNC_CACHE_KEY = 'nonthub.web.github-sync.v1';
 
 const NONTHUB_LOGO = 'https://raw.githubusercontent.com/voidnont/nont/main/public/brand/nonthub.png';

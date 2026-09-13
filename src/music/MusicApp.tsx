@@ -52,7 +52,7 @@ type PlayerSettings = {
 };
 
 const FRXE_REPO = 'https://github.com/voidnont/Frxe';
-const FRXE_SOURCE_VERSION = '0.4.12';
+const FRXE_SOURCE_VERSION = '0.5.0';
 const LIBRARY_KEY = 'frxe.web.library.v1';
 const HISTORY_KEY = 'frxe.web.history.v1';
 const PLAYER_SETTINGS_KEY = 'frxe.web.player.v1';
