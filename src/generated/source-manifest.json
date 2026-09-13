@@ -17,7 +17,7 @@
       "Settings",
       "Icon fixes"
     ],
-    "syncError": "https://api.github.com/repos/voidnont/NontHub returned 504"
+    "syncError": "https://api.github.com/repos/voidnont/NontHub returned 404"
   },
   "voidnont/NontMusic": {
     "repo": "voidnont/NontMusic",
@@ -41,8 +41,7 @@
       "Crossfade",
       "Shuffle",
       "Repeat"
-    ],
-    "syncError": "https://api.github.com/repos/voidnont/NontMusic returned 504"
+    ]
   },
   "voidnont/Frxe": {
     "repo": "voidnont/Frxe",
