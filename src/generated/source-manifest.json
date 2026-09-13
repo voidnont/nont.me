@@ -67,6 +67,7 @@
       "Cast",
       "Android Auto",
       "Queue"
-    ]
+    ],
+    "syncError": "https://raw.githubusercontent.com/voidnont/Frxe/main/Frxe/app/build.gradle.kts returned 404"
   }
 }
