@@ -7,13 +7,13 @@ import {
 } from 'lucide-react';
 
 const VERSION = '0.7.4';
-const NONTHUB_REPO = 'voidnont/NontHub';
+const NONTHUB_REPO = 'voidnont/nont';
 const NONTMUSIC_REPO = 'voidnont/NontMusic';
 const VEIL_REPO = 'voidnont/veilbrowser';
-const FRXE_WEB_VERSION = '0.4.7';
+const FRXE_WEB_VERSION = '0.4.12';
 const SYNC_CACHE_KEY = 'nonthub.web.github-sync.v1';
 
-const NONTHUB_LOGO = 'https://raw.githubusercontent.com/voidnont/NontHub/main/public/nonthub-logo.png';
+const NONTHUB_LOGO = 'https://raw.githubusercontent.com/voidnont/nont/main/public/brand/nonthub.png';
 const NONTMUSIC_LOGO = 'https://raw.githubusercontent.com/voidnont/NontMusic/main/public/nontmusic.png';
 const VEIL_LOGO = 'https://raw.githubusercontent.com/voidnont/veilbrowser/main/assets/veil-glass-icon.png';
 
@@ -34,7 +34,7 @@ const nav = [
 const desktopApps = [
   {
     id: 'nonthub', name: 'NontHub', subtitle: 'Your NONT apps in one place.',
-    description: 'NontHub for Windows by Void.',
+    description: 'Nont - open app and download hub by Void for Windows and Android.',
     category: 'HUB', kind: 'github', repo: NONTHUB_REPO,
     featured: true, icon: Boxes, iconUrl: NONTHUB_LOGO,
   },
