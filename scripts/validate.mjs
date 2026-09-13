@@ -10,6 +10,7 @@ const app = read('src/App.jsx');
 const main = read('src/main.jsx');
 const music = read('src/music/MusicApp.tsx');
 const musicCss = read('src/music/music.css');
+const frxeIcon = read('public/frxe-icon.svg');
 const searchApi = read('api/youtube-search.js');
 const syncApi = read('api/github-sync.js');
 const sharedMusic = read('src/shared/musicSearch.js');
@@ -55,6 +56,10 @@ expect(music.includes('Save direct media'), 'Frxe web must keep browser-safe Sav
 expect(main.includes("document.title = 'FRXE'"), 'music.nont.me must identify as FRXE');
 expect(main.includes('Open FRXE Web Player'), 'NontHub homepage must link to the FRXE web player');
 expect(fs.existsSync('public/frxe-icon.svg'), 'Frxe favicon must exist');
+expect(frxeIcon.includes('viewBox="0 0 108 108"'), 'Frxe web icon must keep the Android launcher viewport');
+expect(frxeIcon.includes('fill="#09090B"') && frxeIcon.includes('M0,0h108v108h-108z'), 'Frxe web icon must keep the launcher background');
+expect(frxeIcon.includes('fill="#FFFFFF"') && frxeIcon.includes('M25,27h36v10h-24v13h21v10h-21v21h-12z'), 'Frxe web icon must keep the launcher F mark');
+expect(frxeIcon.includes('fill="#B7FF59"') && frxeIcon.includes('M63,47l8,-8l12,12l12,-12l8,8l-12,12l12,12l-8,8l-12,-12l-12,12l-8,-8l12,-12z'), 'Frxe web icon must keep the launcher X mark');
 expect(musicCss.includes('.frxe-glass'), 'Frxe liquid-glass styling must remain');
 expect(musicCss.includes('backdrop-filter'), 'Frxe glass must keep backdrop blur');
 expect(musicCss.includes('prefers-reduced-motion'), 'Frxe web must retain reduced-motion support');
