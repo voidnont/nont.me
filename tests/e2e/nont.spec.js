@@ -2,8 +2,8 @@ import { expect, test } from '@playwright/test';
 
 function repoPayload(repo) {
   const versions = {
-    'voidnont/NontHub': '3.0.1',
-    'voidnont/NontMusic': '0.7.2',
+    'voidnont/NontHub': '0.4.4',
+    'voidnont/NontMusic': '0.4.2',
     'voidnont/veilbrowser': '0.8.0',
   };
   const version = versions[repo] || '1.0.0';
@@ -15,7 +15,7 @@ function repoPayload(repo) {
     releaseVersion: version,
     sourceAheadOfRelease: false,
     releaseUrl: `https://github.com/${repo}/releases`,
-    syncedAt: '2026-09-12T08:00:00.000Z',
+    syncedAt: '2026-09-13T00:00:00.000Z',
     asset: {
       id: 1,
       name: `${repo.split('/').pop()}-Setup.exe`,
@@ -61,7 +61,7 @@ test('mobile Hub navigation contains exactly five destinations', async ({ page }
   await expect(navButtons).toContainText(['Home', 'Library', 'Downloads', 'Installer', 'Settings']);
 });
 
-test('Music search cleans metadata, merges duplicates, and prefers official result', async ({ page }) => {
+test('Frxe web player mirrors the five-tab app shell and music ranking', async ({ page }) => {
   await page.route('**/api/youtube-search?*', async (route) => {
     await route.fulfill({
       status: 200,
@@ -96,14 +96,28 @@ test('Music search cleans metadata, merges duplicates, and prefers official resu
   });
 
   await page.goto('/music');
-  await expect(page).toHaveTitle('NontMusic');
+  await expect(page).toHaveTitle('FRXE');
+  await expect(page.getByRole('heading', { name: 'FRXE' })).toBeVisible();
 
-  const search = page.getByRole('textbox', { name: 'Search music' });
+  const nav = page.locator('.frxe-nav');
+  const navButtons = nav.getByRole('button');
+  await expect(navButtons).toHaveCount(5);
+  for (const label of ['Home', 'Search', 'Save', 'Library', 'Settings']) {
+    await expect(nav.getByRole('button', { name: label })).toBeVisible();
+  }
+
+  await nav.getByRole('button', { name: 'Search' }).click();
+  const search = page.getByRole('textbox', { name: 'Search Frxe' });
   await search.fill('Artist Signal');
-  await page.getByRole('button', { name: 'Search' }).click();
+  await page.getByRole('button', { name: 'Search music' }).click();
 
-  await expect(page.locator('.result-main strong', { hasText: /^Signal$/ })).toHaveCount(1);
-  await expect(page.locator('.youtube-row').filter({ has: page.getByText('Signal', { exact: true }) }).getByText('Official', { exact: true })).toBeVisible();
+  await expect(page.locator('.frxe-result-title', { hasText: /^Signal$/ })).toHaveCount(1);
+  await expect(page.getByText('Official', { exact: true })).toBeVisible();
   await expect(page.getByText('Artist - Topic', { exact: true })).toHaveCount(0);
   await expect(page.getByText(/Official Video/i)).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Play Signal', exact: true }).click();
+  await expect(page.locator('.frxe-mini-player')).toBeVisible();
+  await page.locator('.frxe-mini-main').click();
+  await expect(page.getByText('NOW PLAYING', { exact: true })).toBeVisible();
 });

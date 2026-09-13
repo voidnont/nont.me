@@ -47,7 +47,7 @@ function HomeWebPlayerLink() {
   if (!target) return null;
   return createPortal(
     <a className="secondary nontmusic-web-home" href="https://music.nont.me">
-      Open NontMusic Web
+      Open FRXE Web Player
     </a>,
     target,
   );
@@ -60,13 +60,12 @@ async function boot() {
   const favicon = document.querySelector('link[rel="icon"]') || document.head.appendChild(Object.assign(document.createElement('link'), { rel: 'icon' }));
 
   if (musicMode) {
-    document.title = 'NontMusic';
-    favicon.href = 'https://raw.githubusercontent.com/voidnont/NontMusic/main/public/nontmusic.png';
+    document.title = 'FRXE';
+    favicon.href = '/frxe-icon.svg';
     document.documentElement.removeAttribute('data-theme');
     const [{ default: MusicApp }] = await Promise.all([
       import('./music/MusicApp.tsx'),
       import('./music/music.css'),
-      import('./music/polish.css'),
     ]);
     mount(<MusicApp />);
     return;

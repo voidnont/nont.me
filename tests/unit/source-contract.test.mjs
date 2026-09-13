@@ -43,3 +43,35 @@ test('NontMusic contract follows optional source modules', () => {
     assert.ok(contract.capabilities.includes(feature));
   }
 });
+
+test('Frxe contract follows the Android liquid-glass player source tree', () => {
+  const contract = inferSourceContract({
+    repo: 'voidnont/Frxe',
+    pkg: {
+      version: '0.4.6',
+      name: 'frxe',
+      description: 'FRXE liquid-glass music player',
+      scripts: { android: 'gradle' },
+    },
+    sourcePaths: [
+      'Frxe/app/src/main/java/com/frxe/music/ui/components/Glass.kt',
+      'Frxe/app/src/main/java/com/frxe/music/ui/screens/HomeScreen.kt',
+      'Frxe/app/src/main/java/com/frxe/music/ui/screens/SearchScreen.kt',
+      'Frxe/app/src/main/java/com/frxe/music/ui/screens/SaveScreen.kt',
+      'Frxe/app/src/main/java/com/frxe/music/ui/screens/LibraryScreen.kt',
+      'Frxe/app/src/main/java/com/frxe/music/ui/screens/NowPlayingScreen.kt',
+      'Frxe/app/src/main/java/com/frxe/music/lyrics/LyricsRepository.kt',
+      'Frxe/app/src/main/java/com/frxe/music/social/ListenTogether.kt',
+      'Frxe/app/src/main/java/com/frxe/music/voice/VoskVoiceController.kt',
+      'Frxe/app/src/main/java/com/frxe/music/cast/FrxeCastOptionsProvider.kt',
+      'Frxe/app/src/main/res/xml/automotive_app_desc.xml',
+    ],
+    appSource: 'Home Search Save Library Settings QueueMusic shuffle repeat',
+  });
+
+  assert.equal(contract.version, '0.4.6');
+  assert.ok(contract.platforms.includes('Android'));
+  for (const feature of ['Liquid Glass', 'Home', 'Search', 'Save', 'Library', 'Now Playing', 'Lyrics', 'Listen Together', 'Voice', 'Cast', 'Android Auto']) {
+    assert.ok(contract.capabilities.includes(feature));
+  }
+});
