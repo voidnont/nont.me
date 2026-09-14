@@ -1,13 +1,16 @@
 import os
 import secrets
+import urllib.request
 from typing import Literal
 
 from fastapi import FastAPI, Header, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from core import ensure_public_url
+from core import VIDEO_ID_RE, ensure_public_url
 from extractors import innertube_extract, ytdlp_extract
 from pipeline import extract_media
+from relay import build_media_request, copy_media_headers, resolve_audio_url
 
 app = FastAPI(title='FRXE Extractor Worker', docs_url=None, redoc_url=None)
 
@@ -54,3 +57,55 @@ def extract(request: ExtractRequest, authorization: str | None = Header(default=
         return extract_media(data, innertube_extract, ytdlp_extract)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f'Extractor worker failed: {str(exc)[:500]}') from exc
+
+
+@app.get('/stream/{video_id}')
+def stream_audio(
+    video_id: str,
+    authorization: str | None = Header(default=None),
+    range_header: str | None = Header(default=None, alias='Range'),
+):
+    _authorize(authorization)
+    if not VIDEO_ID_RE.fullmatch(str(video_id or '')):
+        raise HTTPException(status_code=400, detail='Invalid YouTube video id.')
+
+    request_data = {
+        'url': f'https://www.youtube.com/watch?v={video_id}',
+        'downloadMode': 'audio',
+        'audioFormat': 'best',
+        'audioBitrate': '320',
+        'videoQuality': '1080',
+    }
+    try:
+        result = extract_media(request_data, innertube_extract, ytdlp_extract)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f'Extractor worker failed: {str(exc)[:500]}') from exc
+
+    media_url = resolve_audio_url(result)
+    if not media_url:
+        if isinstance(result, dict) and result.get('status') == 'challenge':
+            raise HTTPException(status_code=422, detail=str(result.get('message') or 'This track needs user action before playback.')[:500])
+        raise HTTPException(status_code=502, detail=str((result or {}).get('message') if isinstance(result, dict) else 'No playable audio stream was returned.')[:500])
+
+    try:
+        upstream = urllib.request.urlopen(build_media_request(media_url, range_header), timeout=20)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f'Upstream media request failed: {str(exc)[:400]}') from exc
+
+    status = int(getattr(upstream, 'status', 200) or 200)
+    headers = copy_media_headers(getattr(upstream, 'headers', {}))
+
+    def chunks():
+        try:
+            while True:
+                chunk = upstream.read(64 * 1024)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            try:
+                upstream.close()
+            except Exception:
+                pass
+
+    return StreamingResponse(chunks(), status_code=status, headers=headers)
