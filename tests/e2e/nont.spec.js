@@ -38,6 +38,21 @@ async function mockHubApis(page, seen = []) {
   });
 }
 
+async function openSave(page) {
+  await page.goto('/music');
+  await page.locator('.frxe-nav').getByRole('button', { name: 'Save' }).click();
+}
+
+async function mockCobaltKeyState(page, configured = true) {
+  await page.route('**/api/cobalt-key', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ configured }) });
+      return;
+    }
+    await route.continue();
+  });
+}
+
 test('Hub exposes Installer with Install and Update modes', async ({ page }) => {
   await mockHubApis(page);
   await page.goto('/');
@@ -165,11 +180,72 @@ test('Frxe web player mirrors the five-tab app shell and music ranking', async (
   await expect(page.getByText('NOW PLAYING', { exact: true })).toBeVisible();
 });
 
+test('FRXE Save stores a per-browser Cobalt key without echoing it', async ({ page }) => {
+  let savedKey = null;
+  await page.route('**/api/cobalt-key', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ configured: false }) });
+      return;
+    }
+    if (route.request().method() === 'POST') {
+      savedKey = route.request().postDataJSON()?.key;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ configured: true }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ configured: false }) });
+  });
 
-test('FRXE Save uses the Cobalt bridge', async ({ page }) => {
-  let requestBody = null;
+  await openSave(page);
+  const input = page.getByLabel('Cobalt API key');
+  await expect(input).toBeVisible();
+  await input.fill('secret-per-user-key');
+  await page.getByRole('button', { name: 'Save Cobalt key' }).click();
+
+  await expect.poll(() => savedKey).toBe('secret-per-user-key');
+  await expect(page.getByText('Cobalt key configured', { exact: true })).toBeVisible();
+  await expect(input).toHaveValue('');
+  await expect(page.getByText('secret-per-user-key')).toHaveCount(0);
+});
+
+test('FRXE Save uses media extraction before Cobalt', async ({ page }) => {
+  let extractBody = null;
+  let cobaltCalls = 0;
+  await mockCobaltKeyState(page, true);
+  await page.route('**/api/media-extract', async (route) => {
+    extractBody = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ status: 'ready', url: 'https://media.example/song.m4a', filename: 'song.m4a', extractor: 'innertube' }),
+    });
+  });
   await page.route('**/api/cobalt-download', async (route) => {
-    requestBody = route.request().postDataJSON();
+    cobaltCalls += 1;
+    await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'should not be called' }) });
+  });
+
+  await openSave(page);
+  await page.getByLabel('Media URL').fill('https://www.youtube.com/watch?v=example');
+  await page.getByRole('button', { name: 'Save media' }).click();
+
+  await expect.poll(() => extractBody).toMatchObject({
+    url: 'https://www.youtube.com/watch?v=example',
+    downloadMode: 'audio',
+    audioFormat: 'mp3',
+    videoQuality: '1080',
+  });
+  await expect(page.getByText(/InnerTube/i)).toBeVisible();
+  expect(cobaltCalls).toBe(0);
+});
+
+test('FRXE Save uses the Cobalt bridge as fallback', async ({ page }) => {
+  let cobaltBody = null;
+  await mockCobaltKeyState(page, true);
+  await page.route('**/api/media-extract', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'fallback', reason: 'unresolved_by_innertube_and_yt_dlp' }) });
+  });
+  await page.route('**/api/cobalt-download', async (route) => {
+    cobaltBody = route.request().postDataJSON();
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -177,19 +253,39 @@ test('FRXE Save uses the Cobalt bridge', async ({ page }) => {
     });
   });
 
-  await page.goto('/music');
-  await page.locator('.frxe-nav').getByRole('button', { name: 'Save' }).click();
-  await expect(page.getByText('Frxe Save · Cobalt')).toBeVisible();
-  await expect(page.getByRole('combobox', { name: 'Download mode' })).toHaveValue('audio');
+  await openSave(page);
   await page.getByLabel('Media URL').fill('https://www.youtube.com/watch?v=example');
-  await page.getByRole('button', { name: 'Download with Cobalt' }).click();
+  await page.getByRole('button', { name: 'Save media' }).click();
 
-  await expect.poll(() => requestBody).toMatchObject({
-    url: 'https://www.youtube.com/watch?v=example',
-    downloadMode: 'audio',
-    audioFormat: 'mp3',
-    videoQuality: '1080',
-  });
-  await expect(page.getByText('Choose an item')).toBeVisible();
+  await expect.poll(() => cobaltBody).toMatchObject({ url: 'https://www.youtube.com/watch?v=example' });
+  await expect(page.getByText(/Cobalt found 1 downloadable item/i)).toBeVisible();
   await expect(page.getByRole('link', { name: /video 1/i })).toHaveAttribute('href', 'https://media.example/item.mp4');
+});
+
+test('FRXE Save surfaces provider challenge with Open source and Retry', async ({ page }) => {
+  let extractCalls = 0;
+  await mockCobaltKeyState(page, true);
+  await page.route('**/api/media-extract', async (route) => {
+    extractCalls += 1;
+    const body = extractCalls === 1
+      ? {
+          status: 'challenge',
+          challenge: 'captcha_required',
+          message: 'Please complete the CAPTCHA on the source site.',
+          sourceUrl: 'https://example.com/watch/1',
+          extractor: 'yt-dlp',
+        }
+      : { status: 'ready', url: 'https://media.example/after-retry.mp4', filename: 'after-retry.mp4', extractor: 'yt-dlp' };
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  });
+
+  await openSave(page);
+  await page.getByLabel('Media URL').fill('https://example.com/watch/1');
+  await page.getByRole('button', { name: 'Save media' }).click();
+
+  await expect(page.getByText('Please complete the CAPTCHA on the source site.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Open source' })).toHaveAttribute('href', 'https://example.com/watch/1');
+  await page.getByRole('button', { name: 'Retry' }).click();
+  await expect.poll(() => extractCalls).toBe(2);
+  await expect(page.getByText(/yt-dlp/i)).toBeVisible();
 });
