@@ -24,8 +24,8 @@
   "voidnont/Frxe": {
     "repo": "voidnont/Frxe",
     "defaultBranch": "main",
-    "treeSha": "f79545f2b37fc7bc5ab19d96e65792f888ad2803",
-    "pushedAt": "2026-09-14T13:51:41Z",
+    "treeSha": "b6c4bab360925cc7c19b4b87f26ac0ac76d3b93b",
+    "pushedAt": "2026-09-14T16:27:43Z",
     "version": "0.6.6",
     "name": "frxe",
     "description": "FRXE liquid-glass music player",
@@ -45,7 +45,6 @@
       "Cast",
       "Android Auto",
       "Queue"
-    ],
-    "syncError": "https://api.github.com/repos/voidnont/Frxe/git/trees/main?recursive=1 returned 409"
+    ]
   }
 }
