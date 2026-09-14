@@ -146,7 +146,7 @@ expect(sourceUnit.includes('Nont contract follows voidnont/nont'), 'unit suite m
 expect(sourceUnit.includes('Frxe contract follows'), 'unit suite must cover Frxe source adaptation');
 expect(ci.includes('npm run test:unit'), 'CI must run unit tests');
 expect(ci.includes('python -m unittest discover -s extractor-worker/tests -v'), 'CI must run extractor worker tests');
-expect(ci.includes('python -m compileall -q extractor-worker'), 'CI must compile the extractor worker');
+expect(ci.includes('python -m py_compile extractor-worker/core.py extractor-worker/pipeline.py extractor-worker/extractors.py extractor-worker/app.py'), 'CI must compile the extractor worker');
 expect(ci.includes('playwright install --with-deps chromium'), 'CI must install Chromium');
 expect(ci.includes('npm run test:e2e:ci'), 'CI must run browser E2E tests');
 expect(adaptWorkflow.includes("cron: '*/15 * * * *'"), 'source adapter must keep the 15-minute safety sync');
