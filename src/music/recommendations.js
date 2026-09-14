@@ -16,6 +16,28 @@ function stableHash(value) {
   return hash >>> 0;
 }
 
+function prioritizeRecommendationMix(ordered, headLimit = 6) {
+  const cap = Math.min(Math.max(0, headLimit), ordered.length);
+  if (cap < 3) return ordered;
+
+  const familiar = ordered.filter((seed) => seed.kind === 'artist' || seed.kind === 'track');
+  const genres = ordered.filter((seed) => seed.kind === 'genre');
+  const wildcards = ordered.filter((seed) => seed.kind === 'wildcard');
+  const selected = [...familiar.slice(0, Math.max(0, cap - 2))];
+  if (genres[0]) selected.push(genres[0]);
+  if (wildcards[0]) selected.push(wildcards[0]);
+
+  const ids = new Set(selected.map((seed) => seed.id));
+  for (const seed of ordered) {
+    if (selected.length >= cap) break;
+    if (ids.has(seed.id)) continue;
+    selected.push(seed);
+    ids.add(seed.id);
+  }
+
+  return [...selected, ...ordered.filter((seed) => !ids.has(seed.id))];
+}
+
 export function buildRecommendationSeeds({ history = [], library = [], recentSearches = [] } = {}) {
   const seeds = new Map();
   const artistCounts = new Map();
@@ -52,7 +74,8 @@ export function buildRecommendationSeeds({ history = [], library = [], recentSea
     seeds.set(id, { id, kind: 'wildcard', label: query.replace(/\b\w/g, (char) => char.toUpperCase()), query, weight: SIGNAL_WEIGHTS.wildcard - index * 0.005 });
   });
 
-  return [...seeds.values()].sort((a, b) => b.weight - a.weight || a.id.localeCompare(b.id));
+  const ordered = [...seeds.values()].sort((a, b) => b.weight - a.weight || a.id.localeCompare(b.id));
+  return prioritizeRecommendationMix(ordered, 6);
 }
 
 export function buildColdStartSeeds(keyValue = '', limit = 6) {
