@@ -1,332 +1,259 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  ArrowDownToLine, Boxes, Check, CheckCircle2, ChevronRight,
-  Download, ExternalLink, FileArchive, Home, Library,
-  LoaderCircle, Moon, Music2, PackageOpen, Plus, RefreshCw, Search,
-  Settings, ShieldCheck, Sun, Trash2, X,
+  ChevronRight,
+  Download,
+  ExternalLink,
+  Github,
+  LoaderCircle,
+  Monitor,
+  Music2,
+  Package,
+  Search,
+  Smartphone,
+  X,
 } from 'lucide-react';
+import { detectCurrentDevice } from './device.js';
+import { normalizeGithubRepo } from '../shared/github-repo.js';
+import { recommendAsset } from '../shared/release-classifier.js';
 
-const VERSION = '0.7.4';
-const NONTHUB_REPO = 'voidnont/nont';
-const FRXE_REPO = 'voidnont/Frxe';
-const VEIL_REPO = 'voidnont/veilbrowser';
-const FRXE_WEB_VERSION = '0.6.7';
-const SYNC_CACHE_KEY = 'nonthub.web.github-sync.v1';
-
-const NONTHUB_LOGO = 'https://raw.githubusercontent.com/voidnont/nont/main/public/brand/nonthub.png';
-const VEIL_LOGO = 'https://raw.githubusercontent.com/voidnont/veilbrowser/main/assets/veil-glass-icon.png';
-
-const repoConfigs = {
-  [NONTHUB_REPO]: { fallbackVersion: '0.4.4' },
-  [FRXE_REPO]: { fallbackVersion: FRXE_WEB_VERSION },
-  [VEIL_REPO]: { fallbackVersion: '0.8.0' },
+const VERSION = '0.8.7';
+const PLATFORM_OPTIONS = ['recommended', 'windows', 'android', 'macos', 'linux', 'ios'];
+const PLATFORM_LABELS = {
+  recommended: 'Recommended',
+  windows: 'Windows',
+  android: 'Android',
+  macos: 'macOS',
+  linux: 'Linux',
+  ios: 'iOS',
+  chromeos: 'ChromeOS',
+  unknown: 'Unknown device',
 };
 
-const nav = [
-  ['home', 'Home', Home],
-  ['library', 'Library', Library],
-  ['downloads', 'Downloads', Download],
-  ['installer', 'Installer', PackageOpen],
-  ['settings', 'Settings', Settings],
-];
-
-const desktopApps = [
-  {
-    id: 'nonthub', name: 'NontHub', subtitle: 'Your NONT apps in one place.',
-    description: 'Nont - open app and download hub by Void for Windows and Android.',
-    category: 'HUB', kind: 'github', repo: NONTHUB_REPO,
-    featured: true, icon: Boxes, iconUrl: NONTHUB_LOGO,
-  },
-  {
-    id: 'veil-browser', name: 'Veil Browser', subtitle: 'Private by design.',
-    description: 'A privacy-first desktop browser powered by the independent Veil Engine.',
-    category: 'WEB', kind: 'github', repo: VEIL_REPO,
-    featured: true, icon: Boxes, iconUrl: VEIL_LOGO,
-  },
-];
-
-const frxeWebApp = {
-  id: 'frxe-web', name: 'FRXE Web', subtitle: 'Liquid sound in your browser.',
-  description: 'The browser version of FRXE at music.nont.me.',
-  category: 'MUSIC', kind: 'web', route: 'https://music.nont.me', repo: FRXE_REPO,
-  fallbackVersion: FRXE_WEB_VERSION,
-  featured: true, icon: Music2, iconUrl: '/frxe-icon.svg',
-};
-
-const catalog = [...desktopApps, frxeWebApp];
-const syncTargets = [...desktopApps, frxeWebApp];
-
-function readJson(key, fallback) {
-  try { return JSON.parse(localStorage.getItem(key) || '') || fallback; } catch { return fallback; }
-}
-function writeJson(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage can be unavailable */ }
-}
-function readSyncCache() {
-  const cached = readJson(SYNC_CACHE_KEY, {});
-  return Object.fromEntries(Object.entries(cached).filter(([repo]) => Boolean(repoConfigs[repo])));
-}
 function formatBytes(bytes = 0) {
-  if (!bytes) return '0 B';
+  if (!bytes) return '';
   const units = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  return `${(bytes / 1024 ** i).toFixed(i ? 1 : 0)} ${units[i]}`;
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / (1024 ** index)).toFixed(index ? 1 : 0)} ${units[index]}`;
 }
-function formatSyncTime(value) {
-  if (!value) return 'Not synced yet';
-  try { return new Date(value).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }); }
-  catch { return 'Synced'; }
+
+function bestForPlatform(assets = [], platform) {
+  return assets
+    .filter((asset) => asset.installable && asset.platform === platform)
+    .sort((a, b) => (b.score || 0) - (a.score || 0) || (b.size || 0) - (a.size || 0))[0] || null;
 }
-function githubRepo(value) {
+
+function validDownloadUrl(value = '') {
   try {
-    const u = new URL(value.trim());
-    if (u.hostname !== 'github.com' && u.hostname !== 'www.github.com') return null;
-    const [owner, repo] = u.pathname.split('/').filter(Boolean);
-    return owner && repo ? `${owner}/${repo.replace(/\.git$/i, '')}` : null;
-  } catch { return null; }
-}
-function repoUrl(repo) { return `https://github.com/${repo}`; }
-function startDownload(asset) { window.open(asset.url, '_blank', 'noopener,noreferrer'); }
-
-async function fetchRepoSync(repo, fresh = false) {
-  const params = new URLSearchParams({ repo });
-  if (fresh) {
-    params.set('fresh', '1');
-    params.set('ts', String(Date.now()));
+    const url = new URL(value);
+    return url.protocol === 'https:' && ['github.com', 'www.github.com'].includes(url.hostname.toLowerCase());
+  } catch {
+    return false;
   }
-  const response = await fetch(`/api/github-sync?${params.toString()}`, { cache: 'no-store' });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.detail || data.error || `Sync failed (${response.status}).`);
-  return data;
 }
 
-export default function App() {
-  const [page, setPage] = useState('home');
-  const [installerMode, setInstallerMode] = useState('install');
-  const [theme, setTheme] = useState(() => localStorage.getItem('nonthub.web.theme') || 'dark');
-  const [query, setQuery] = useState('');
-  const [downloads, setDownloads] = useState(() => readJson('nonthub.web.downloads', []));
-  const [showAdd, setShowAdd] = useState(false);
-  const [directUrl, setDirectUrl] = useState('');
-  const [addBusy, setAddBusy] = useState(false);
-  const [repoSync, setRepoSync] = useState(readSyncCache);
-  const [installerBusy, setInstallerBusy] = useState({});
-  const [syncBusy, setSyncBusy] = useState(false);
-  const syncLockRef = useRef(false);
+function sourceVersion(app, repo) {
+  return app?.sources?.find((source) => source.repo?.toLowerCase() === repo.toLowerCase())?.version || '';
+}
 
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    try { localStorage.setItem('nonthub.web.theme', theme); } catch { /* no-op */ }
-  }, [theme]);
-  useEffect(() => writeJson('nonthub.web.downloads', downloads.slice(0, 100)), [downloads]);
-  useEffect(() => {
-    const cacheable = Object.fromEntries(Object.entries(repoSync).map(([repo, value]) => [repo, { ...value, status: value?.status === 'checking' ? 'ready' : value?.status }]));
-    writeJson(SYNC_CACHE_KEY, cacheable);
-  }, [repoSync]);
-  useEffect(() => { void syncAll(false); }, []);
+function PlatformIcon({ platform, size = 17 }) {
+  if (platform === 'android' || platform === 'ios') return <Smartphone size={size} />;
+  return <Monitor size={size} />;
+}
 
-  const visibleApps = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return q ? catalog.filter((app) => `${app.name} ${app.subtitle} ${app.description} ${app.category}`.toLowerCase().includes(q)) : catalog;
-  }, [query]);
+function DownloadDrawer({ app, onClose, onDownload }) {
+  if (!app) return null;
+  const assets = (app.assets || []).filter((asset) => asset.platform && asset.platform !== 'unknown');
+  const grouped = PLATFORM_OPTIONS.slice(1).map((platform) => ({
+    platform,
+    assets: assets.filter((asset) => asset.platform === platform),
+  })).filter((group) => group.assets.length);
 
-  async function syncOne(app, fresh = false) {
-    if (!app?.repo) return null;
-    setRepoSync((state) => ({ ...state, [app.repo]: { ...(state[app.repo] || {}), status: 'checking', error: '' } }));
-    try {
-      const data = { ...(await fetchRepoSync(app.repo, fresh)), syncedAt: new Date().toISOString() };
-      setRepoSync((state) => ({ ...state, [app.repo]: data }));
-      return data;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      let failed;
-      setRepoSync((state) => {
-        failed = {
-          ...(state[app.repo] || {}),
-          status: 'error', repo: app.repo,
-          sourceVersion: state[app.repo]?.sourceVersion || repoConfigs[app.repo]?.fallbackVersion || '',
-          error: message,
-        };
-        return { ...state, [app.repo]: failed };
-      });
-      return failed || { status: 'error', repo: app.repo, sourceVersion: repoConfigs[app.repo]?.fallbackVersion || '', error: message };
-    }
-  }
-
-  async function syncAll(fresh = false) {
-    if (syncLockRef.current) return;
-    syncLockRef.current = true;
-    setSyncBusy(true);
-    try { await Promise.all(syncTargets.map((app) => syncOne(app, fresh))); }
-    finally {
-      syncLockRef.current = false;
-      setSyncBusy(false);
-    }
-  }
-
-  function appVersion(app) {
-    const repo = app.repo || app.versionRepo;
-    return repoSync[repo]?.sourceVersion || app.fallbackVersion || repoConfigs[repo]?.fallbackVersion || VERSION;
-  }
-
-  function openApp(app) {
-    if (app.kind === 'web') { window.location.href = app.route; return; }
-    setInstallerMode('install');
-    setPage('installer');
-  }
-
-  async function installerAction(app, mode) {
-    if (installerBusy[app.repo]) return;
-    setInstallerBusy((state) => ({ ...state, [app.repo]: true }));
-    try {
-      let synced = repoSync[app.repo];
-      if (!synced || synced.status === 'error' || (!synced.asset && !synced.releaseUrl)) synced = await syncOne(app, true);
-      if (synced?.asset) {
-        startDownload(synced.asset);
-        setDownloads((items) => [{
-          id: crypto.randomUUID(), name: synced.asset.name, repo: app.repo,
-          size: synced.asset.size, status: 'opened', action: mode,
-          date: Date.now(), url: synced.asset.url,
-        }, ...items]);
-      } else {
-        window.open(synced?.releaseUrl || repoUrl(app.repo), '_blank', 'noopener,noreferrer');
-      }
-    } finally {
-      setInstallerBusy((state) => ({ ...state, [app.repo]: false }));
-    }
-  }
-
-  async function addDownload(event) {
-    event.preventDefault();
-    if (!directUrl.trim() || addBusy) return;
-    setAddBusy(true);
-    try {
-      const repo = githubRepo(directUrl);
-      let asset;
-      if (repo) {
-        const canonical = Object.keys(repoConfigs).find((key) => key.toLowerCase() === repo.toLowerCase());
-        if (!canonical) throw new Error('Only official NONT repositories can be resolved automatically here.');
-        const synced = await fetchRepoSync(canonical, true);
-        asset = synced.asset;
-        if (!asset) throw new Error('No published installer is available in this repository yet.');
-      } else {
-        const url = new URL(directUrl.trim());
-        if (url.protocol !== 'https:') throw new Error('Direct downloads must use HTTPS.');
-        asset = { name: decodeURIComponent(url.pathname.split('/').pop() || 'download'), url: url.toString(), size: 0 };
-      }
-      startDownload(asset);
-      setDownloads((items) => [{ id: crypto.randomUUID(), name: asset.name, repo, size: asset.size, status: 'opened', action: 'download', date: Date.now(), url: asset.url }, ...items]);
-      setShowAdd(false);
-      setDirectUrl('');
-      setPage('downloads');
-    } catch (error) {
-      alert(error instanceof Error ? error.message : String(error));
-    } finally {
-      setAddBusy(false);
-    }
-  }
-
-  return <div className="shell">
-    <aside className="sidebar">
-      <button className="brand" onClick={() => setPage('home')}>
-        <span className="brand-mark"><img src={NONTHUB_LOGO} alt="NontHub" /></span>
-        <span><strong>NONT</strong><small>HUB</small></span>
-      </button>
-      <div className="sidebar-label">NONTHUB WEB</div>
-      <nav>{nav.map(([id, label, Icon]) => <button key={id} className={page === id ? 'nav-item active' : 'nav-item'} onClick={() => setPage(id)}><Icon size={18}/><span>{label}</span>{id === 'downloads' && downloads.length > 0 && <b>{downloads.length}</b>}</button>)}</nav>
-      <div className="sidebar-bottom">
-        <div className="status"><i/> {syncBusy ? 'Syncing GitHub…' : 'GitHub synced'}</div>
+  return <div className="drawer-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+    <section className="download-drawer" role="dialog" aria-modal="true" aria-label={`${app.name || 'App'} downloads`}>
+      <div className="drawer-head">
+        <div>
+          <span className="kicker">ALL RELEASE ASSETS</span>
+          <h2>{app.name || app.repo || 'Downloads'}</h2>
+        </div>
+        <button className="icon-button" onClick={onClose} aria-label="Close downloads"><X size={18} /></button>
       </div>
-    </aside>
-
-    <main className="main">
-      <header className="topbar">
-        <div className="search"><Search size={17}/><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search your app library"/></div>
-        <div className="top-actions">
-          <button className="icon-button" aria-label="Toggle theme" onClick={() => setTheme(theme === 'bright' ? 'dark' : 'bright')}>{theme === 'bright' ? <Moon size={17}/> : <Sun size={17}/>}</button>
-          <button className="secondary compact" disabled={syncBusy} onClick={() => void syncAll(true)}><RefreshCw className={syncBusy ? 'spin' : ''} size={16}/> {syncBusy ? 'Syncing…' : 'Sync GitHub'}</button>
-          <button className="primary compact" onClick={() => { setInstallerMode('install'); setPage('installer'); }}><PackageOpen size={16}/> Installer</button>
-        </div>
-      </header>
-
-      {page === 'home' && <section className="content">
-        <div className="hero">
-          <div>
-            <div className="eyebrow"><i/> NONT ECOSYSTEM · v{VERSION}</div>
-            <h1>Your apps.<br/><em>One signal.</em></h1>
-            <p>NontHub keeps FRXE Web and Veil Browser connected to their source, with one place for the web player and the latest published desktop builds.</p>
-            <div className="hero-actions">
-              <button className="primary" onClick={() => setPage('library')}><Boxes size={18}/> Open library</button>
-              <button className="secondary" onClick={() => { setInstallerMode('install'); setPage('installer'); }}><PackageOpen size={18}/> Open installer</button>
+      {grouped.length ? <div className="download-groups">
+        {grouped.map((group) => <div className="download-group" key={group.platform}>
+          <h3><PlatformIcon platform={group.platform} /> {PLATFORM_LABELS[group.platform]}</h3>
+          {group.assets.map((asset) => <div className="asset-row" key={`${asset.repo || app.repo}-${asset.id || asset.name}`}>
+            <div>
+              <strong>{asset.name}</strong>
+              <span>{asset.arch !== 'unknown' ? asset.arch : 'architecture unspecified'}{asset.size ? ` · ${formatBytes(asset.size)}` : ''}</span>
             </div>
-          </div>
-          <div className="signal"><span/><span/><div className="signal-core"><img src={NONTHUB_LOGO} alt="NontHub"/></div><div className="bars">{Array.from({length:21}).map((_,i)=><i key={i} style={{height:`${18+((i*17)%48)}px`}}/> )}</div></div>
-        </div>
-        <div className="home-split">
-          <div><Title title="Featured" subtitle="Live versions are synced from GitHub"/><div className="app-grid">{visibleApps.filter((app)=>app.featured).map((app)=><AppCard key={app.id} app={app} version={appVersion(app)} sync={repoSync[app.repo || app.versionRepo]} onOpen={()=>openApp(app)}/>)}</div></div>
-          <aside className="pulse">
-            <span className="category">SYSTEM</span><h3>NONT pulse</h3>
-            <Pulse icon={<img className="pulse-app-icon" src={NONTHUB_LOGO} alt=""/>} label="NontHub" value={`v${appVersion(desktopApps[0])}`}/>
-            <Pulse icon={<img className="pulse-app-icon" src="/frxe-icon.svg" alt=""/>} label="FRXE Web" value={`v${appVersion(frxeWebApp)}`}/>
-            <Pulse icon={<img className="pulse-app-icon" src={VEIL_LOGO} alt=""/>} label="Veil Browser" value={`v${appVersion(desktopApps[1])}`}/>
-            <button className="ghost" onClick={()=>{setInstallerMode('update');setPage('installer');}}>Install or update apps <ChevronRight size={14}/></button>
-          </aside>
-        </div>
-      </section>}
-
-      {page === 'library' && <section className="content">
-        <Title title="Library" subtitle="NontHub, FRXE Web and Veil Browser stay connected to their source projects."/>
-        <div className="app-grid all">{visibleApps.map((app)=><AppCard key={app.id} app={app} version={appVersion(app)} sync={repoSync[app.repo || app.versionRepo]} onOpen={()=>openApp(app)}/>)}</div>
-      </section>}
-
-      {page === 'downloads' && <section className="content">
-        <Title title="Downloads" subtitle="Files opened from GitHub Releases or direct HTTPS links." action={<><button className="secondary compact" onClick={()=>setDownloads([])}><Trash2 size={15}/> Clear</button><button className="secondary compact" onClick={()=>setShowAdd(true)}><Plus size={15}/> New</button></>}/>
-        {downloads.length===0?<Empty onAdd={()=>setShowAdd(true)}/>:<div className="downloads">{downloads.map((item)=><div className="download-row" key={item.id}><span className="download-icon"><CheckCircle2 size={20}/></span><div><strong>{item.name}</strong><small>{item.repo ? `GitHub · ${item.repo}` : 'Direct download'}{item.size ? ` · ${formatBytes(item.size)}`:''}</small><p>{item.action === 'update' ? 'Latest installer opened for update.' : item.action === 'install' ? 'Latest installer opened for installation.' : 'Opened in your browser download flow.'}</p></div><button className="icon-button" aria-label={`Open ${item.name}`} onClick={()=>window.open(item.url,'_blank','noopener,noreferrer')}><ExternalLink size={16}/></button></div>)}</div>}
-      </section>}
-
-      {page === 'installer' && <section className="content">
-        <Title title="Installer" subtitle="Install a NONT app or update an existing copy using the latest published GitHub installer." action={<button className="secondary compact" disabled={syncBusy} onClick={() => void syncAll(true)}><RefreshCw className={syncBusy ? 'spin' : ''} size={15}/> Refresh GitHub</button>}/>
-        <div className="theme-grid" role="tablist" aria-label="Installer mode">
-          <button type="button" role="tab" aria-selected={installerMode === 'install'} className={installerMode === 'install' ? 'active' : ''} onClick={()=>setInstallerMode('install')}><PackageOpen size={19}/><strong>Install</strong>{installerMode === 'install' && <Check size={15}/>}</button>
-          <button type="button" role="tab" aria-selected={installerMode === 'update'} className={installerMode === 'update' ? 'active' : ''} onClick={()=>setInstallerMode('update')}><RefreshCw size={19}/><strong>Update</strong>{installerMode === 'update' && <Check size={15}/>}</button>
-        </div>
-        <div className="notice"><ShieldCheck size={19}/><div><strong>{installerMode === 'install' ? 'Install latest published build' : 'Update your current installation'}</strong><p>{installerMode === 'install' ? 'NontHub checks GitHub for the newest Windows installer and opens it in your browser.' : 'Choose the app you already have installed. NontHub opens the newest published installer so it can replace or update your current version.'}</p></div></div>
-        <div className="update-stack">{desktopApps.map((app)=><InstallerCard key={app.id} app={app} mode={installerMode} sync={repoSync[app.repo]} busy={Boolean(installerBusy[app.repo])} onSync={()=>void syncOne(app, true)} onAction={()=>void installerAction(app, installerMode)}/>)}</div>
-      </section>}
-
-      {page === 'settings' && <section className="content">
-        <Title title="Settings" subtitle="Appearance and GitHub sync behavior for NontHub Web."/>
-        <SettingSection icon={<Sun size={18}/>} title="Appearance" subtitle="Choose the NontHub dark or bright theme."><div className="theme-grid"><button className={theme==='dark'?'active':''} onClick={()=>setTheme('dark')}><Moon size={19}/><strong>Dark</strong>{theme==='dark'&&<Check size={15}/>}</button><button className={theme==='bright'?'active':''} onClick={()=>setTheme('bright')}><Sun size={19}/><strong>Bright</strong>{theme==='bright'&&<Check size={15}/>}</button></div></SettingSection>
-        <SettingSection icon={<RefreshCw size={18}/>} title="GitHub sync" subtitle="Versions and published installers come directly from each official repository."><div className="setting-row"><div><strong>Automatic sync</strong><p>The page restores the last successful versions instantly, then refreshes NontHub, FRXE Web and Veil Browser through the nont.me sync endpoint. Manual Sync GitHub forces a fresh GitHub read.</p></div><span>{syncBusy ? 'Syncing' : 'Enabled'}</span></div></SettingSection>
-      </section>}
-    </main>
-
-    {showAdd && <div className="modal-backdrop" onMouseDown={()=>!addBusy&&setShowAdd(false)}><form className="modal" onSubmit={addDownload} onMouseDown={(e)=>e.stopPropagation()}><div className="modal-title"><div><small>DOWNLOAD</small><h2>Add download</h2></div><button type="button" className="icon-button" aria-label="Close" onClick={()=>setShowAdd(false)}><X size={17}/></button></div><label>HTTPS URL or official GitHub repository</label><input autoFocus value={directUrl} onChange={(e)=>setDirectUrl(e.target.value)} placeholder="https://github.com/voidnont/nont"/><p>{githubRepo(directUrl)?`GitHub repository detected · ${githubRepo(directUrl)}`:'Direct files must use HTTPS. Official NONT repositories resolve to the newest published installer.'}</p><button className="primary full" disabled={addBusy||!directUrl.trim()}>{addBusy?<LoaderCircle className="spin" size={17}/>:<Download size={17}/>} Resolve & download</button></form></div>}
+            {asset.installable ? <button className="small-download" data-download-url={asset.url} onClick={() => onDownload(asset)}>
+              <Download size={15} /> Download
+            </button> : <span className="not-direct">Not a direct install</span>}
+          </div>)}
+        </div>)}
+      </div> : <div className="empty-panel"><Package size={24} /><strong>No installable release assets yet.</strong></div>}
+    </section>
   </div>;
 }
 
-function Title({ title, subtitle, action }) {
-  return <div className="section-title"><div><h2>{title}</h2><p>{subtitle}</p></div>{action&&<div className="section-actions">{action}</div>}</div>;
+function ResultCard({ item, platform, device, onDetails, onDownload }) {
+  const targetPlatform = platform === 'recommended' ? device.os : platform;
+  const recommended = platform === 'recommended'
+    ? recommendAsset(item.assets || [], device)
+    : bestForPlatform(item.assets || [], targetPlatform);
+  const badges = item.availablePlatforms || [];
+  return <article className="result-card">
+    <div className="result-main">
+      <div className="result-icon"><Package size={21} /></div>
+      <div className="result-copy">
+        <div className="result-name-line">
+          <h3>{item.name || item.repo}</h3>
+          {item.latestVersion && <span>v{item.latestVersion}</span>}
+        </div>
+        <p className="repo-name">{item.repo}</p>
+        <p>{item.description || 'No repository description provided.'}</p>
+        <div className="platform-badges">
+          {badges.map((badge) => <span key={badge}>{PLATFORM_LABELS[badge] || badge}</span>)}
+          {!badges.length && <span>Source only</span>}
+        </div>
+      </div>
+    </div>
+    <div className="result-actions">
+      {recommended ? <button className="primary compact" data-download-url={recommended.url} onClick={() => onDownload(recommended)}>
+        <Download size={16} /> Download
+      </button> : <button className="secondary compact" onClick={() => onDetails(item)}>View downloads <ChevronRight size={15} /></button>}
+      <a className="repo-link" href={item.url || `https://github.com/${item.repo}`} target="_blank" rel="noreferrer">GitHub <ExternalLink size={13} /></a>
+    </div>
+  </article>;
 }
-function Pulse({ icon, label, value }) {
-  return <div className="pulse-row"><span>{icon}</span><div><strong>{label}</strong><small>{value}</small></div></div>;
-}
-function AppCard({ app, onOpen, version, sync }) {
-  const Icon = app.icon;
-  const actionLabel = app.kind === 'web' ? 'Open' : 'Installer';
-  return <article className="app-card"><div className="app-card-top"><span className="app-icon">{app.iconUrl ? <img className="real-app-icon" src={app.iconUrl} alt={`${app.name} icon`}/> : <Icon size={27}/>}</span><span className="version-chip">v{version}</span></div><div className="app-copy"><span className="category">{app.category}</span><h3>{app.name}</h3><strong>{app.subtitle}</strong><p>{sync?.description || app.description}</p></div><button className="secondary full" onClick={onOpen}>{app.kind==='web'?<ChevronRight size={16}/>:<PackageOpen size={16}/>} {actionLabel}</button></article>;
-}
-function InstallerCard({ app, mode, sync, busy, onSync, onAction }) {
-  const version = sync?.sourceVersion || repoConfigs[app.repo]?.fallbackVersion || '—';
-  const releaseVersion = sync?.releaseVersion;
-  const hasInstaller = Boolean(sync?.asset);
-  const checking = sync?.status === 'checking';
-  const primaryLabel = hasInstaller ? `${mode === 'install' ? 'Install' : 'Update'} ${app.name}` : 'Open releases';
-  return <article className="update-card"><span className="update-icon"><img src={app.iconUrl} alt={`${app.name} icon`}/></span><div><span className="category">GITHUB SYNCED</span><h3>{app.name}</h3><p>{app.repo}</p><div className="version-line"><span>Source</span><strong>v{version}</strong><i>→</i><span>Installer</span><strong>{releaseVersion ? `v${releaseVersion}` : 'Not published'}</strong></div>{sync?.sourceAheadOfRelease&&<small className="error-text">Source v{version} is newer than the published installer. Installer stays on v{releaseVersion} until a new GitHub Release is published.</small>}{sync?.asset&&<small className="asset-line"><FileArchive size={12}/> {sync.asset.name} · {formatBytes(sync.asset.size)}</small>}{sync?.status==='error'&&<small className="error-text">Sync failed: {sync.error}</small>}{sync?.status==='ready'&&!hasInstaller&&<small className="asset-line">No installer is published in GitHub Releases yet.</small>}{sync?.syncedAt&&<small className="asset-line">Last synced {formatSyncTime(sync.syncedAt)}</small>}</div><div className="update-actions"><button className="secondary" onClick={onSync} disabled={checking||busy}><RefreshCw className={checking?'spin':''} size={15}/> Sync</button><button className="primary" onClick={onAction} disabled={checking||busy}>{busy?<LoaderCircle className="spin" size={15}/>:hasInstaller?<ArrowDownToLine size={15}/>:<ExternalLink size={15}/>} {busy?'Opening…':primaryLabel}</button></div></article>;
-}
-function Empty({ onAdd }) {
-  return <div className="empty"><Download size={27}/><h3>No downloads yet</h3><p>Install an app or add a direct download.</p><button className="primary" onClick={onAdd}><Plus size={16}/> Add download</button></div>;
-}
-function SettingSection({ icon, title, subtitle, children }) {
-  return <section className="settings-section"><div className="settings-heading"><span>{icon}</span><div><h3>{title}</h3><p>{subtitle}</p></div></div><div className="settings-body">{children}</div></section>;
+
+export default function App() {
+  const [device, setDevice] = useState({ os: 'unknown', arch: 'unknown', mobile: false, confidence: 'low' });
+  const [frxe, setFrxe] = useState(null);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [platform, setPlatform] = useState('recommended');
+  const [selectedApp, setSelectedApp] = useState(null);
+  const [loading, setLoading] = useState({ frxe: true, search: false });
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    void detectCurrentDevice().then(setDevice);
+    void fetch('/api/github-app?app=frxe', { cache: 'no-store' })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Could not load Frxe');
+        return data;
+      })
+      .then(setFrxe)
+      .catch((reason) => setError(reason instanceof Error ? reason.message : String(reason)))
+      .finally(() => setLoading((state) => ({ ...state, frxe: false })));
+  }, []);
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setResults([]);
+      setLoading((state) => ({ ...state, search: false }));
+      return undefined;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setLoading((state) => ({ ...state, search: true }));
+      setError('');
+      try {
+        const directRepo = normalizeGithubRepo(trimmed);
+        const url = directRepo
+          ? `/api/github-app?repo=${encodeURIComponent(directRepo)}`
+          : `/api/github-search?${new URLSearchParams({ q: trimmed, ...(platform !== 'recommended' ? { platform } : {}) }).toString()}`;
+        const response = await fetch(url, { signal: controller.signal, cache: 'no-store' });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Search failed');
+        setResults(directRepo ? [data] : (data.items || []));
+      } catch (reason) {
+        if (reason?.name !== 'AbortError') setError(reason instanceof Error ? reason.message : String(reason));
+      } finally {
+        setLoading((state) => ({ ...state, search: false }));
+      }
+    }, 300);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query, platform]);
+
+  const heroRecommendation = useMemo(() => recommendAsset(frxe?.assets || [], device), [frxe, device]);
+  const deviceLabel = `${PLATFORM_LABELS[device.os] || 'Unknown'}${device.arch !== 'unknown' ? ` · ${device.arch}` : ''}`;
+  const windowsVersion = sourceVersion(frxe, 'voidnont/Frxe-Windows');
+  const androidVersion = sourceVersion(frxe, 'voidnont/frxe');
+
+  function startDownload(asset) {
+    if (!asset?.url || !validDownloadUrl(asset.url)) {
+      setError('This release did not provide a valid GitHub download URL.');
+      return;
+    }
+    window.location.href = asset.url;
+  }
+
+  function heroAction() {
+    if (device.os === 'unknown' || device.os === 'chromeos') return <button className="primary hero-download" onClick={() => setSelectedApp(frxe)} disabled={!frxe}>Choose download</button>;
+    if (heroRecommendation) return <button className="primary hero-download" data-download-url={heroRecommendation.url} onClick={() => startDownload(heroRecommendation)}><Download size={18} /> Download Frxe for {PLATFORM_LABELS[device.os]}</button>;
+    if (device.os === 'android') return <button className="primary hero-download" disabled>Android build not available yet</button>;
+    return <button className="primary hero-download" onClick={() => setSelectedApp(frxe)} disabled={!frxe}>Choose {PLATFORM_LABELS[device.os]} download</button>;
+  }
+
+  return <div className="app-shell">
+    <header className="site-header">
+      <a className="brand" href="/" aria-label="Nont home"><img src="/nont-icon.svg" alt="" /><span>Nont</span></a>
+      <div className="header-right">
+        <span className="device-pill"><span className="device-dot" /> {deviceLabel}</span>
+        <a href="https://github.com/voidnont" target="_blank" rel="noreferrer" className="header-link"><Github size={17} /> <span>GitHub</span></a>
+        <a href="https://ko-fi.com/voidnont" target="_blank" rel="noreferrer" className="header-link">Ko-fi</a>
+      </div>
+    </header>
+
+    <main>
+      <section className="hero-frxe">
+        <div className="hero-copy">
+          <span className="kicker">FEATURED · FRXE</span>
+          <h1>One app.<br /><em>Your device.</em></h1>
+          <p>Frxe is connected directly to its Windows and Android GitHub releases. Nont detects your device and selects the compatible package without making you choose a repository.</p>
+          <div className="hero-actions">
+            {loading.frxe ? <button className="primary hero-download" disabled><LoaderCircle className="spin" size={18} /> Checking releases…</button> : heroAction()}
+            <button className="secondary hero-download" onClick={() => setSelectedApp(frxe)} disabled={!frxe}>Other downloads</button>
+            <a className="secondary hero-download" href="https://music.nont.me">Open FRXE Web</a>
+          </div>
+          <div className="source-status">
+            <span><Monitor size={15} /> Windows {windowsVersion ? `v${windowsVersion}` : frxe?.availablePlatforms?.includes('windows') ? 'available' : 'checking'}</span>
+            <span><Smartphone size={15} /> Android {frxe?.availablePlatforms?.includes('android') ? (androidVersion ? `v${androidVersion}` : 'available') : 'not published yet'}</span>
+          </div>
+        </div>
+        <div className="hero-art" aria-hidden="true">
+          <div className="orb orb-one" /><div className="orb orb-two" />
+          <div className="frxe-mark"><Music2 size={48} /><strong>FRXE</strong><span>{deviceLabel}</span></div>
+        </div>
+      </section>
+
+      <section className="search-section" id="apps">
+        <div className="section-heading">
+          <div><span className="kicker">GITHUB APP SEARCH</span><h2>Find the build for your device.</h2></div>
+          <span className="version">nont.me v{VERSION}</span>
+        </div>
+        <label className="github-search">
+          <Search size={20} />
+          <input aria-label="Search GitHub apps" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search GitHub apps or paste owner/repo" autoComplete="off" />
+          {loading.search && <LoaderCircle className="spin" size={18} />}
+        </label>
+        <div className="platform-tabs" role="tablist" aria-label="Platform filter">
+          {PLATFORM_OPTIONS.map((item) => <button key={item} role="tab" aria-selected={platform === item} className={platform === item ? 'platform-tab active' : 'platform-tab'} onClick={() => setPlatform(item)}>{PLATFORM_LABELS[item]}</button>)}
+        </div>
+        {error && <div className="error-banner" role="status">{error}</div>}
+        {!query.trim() ? <div className="discovery-empty">
+          <Search size={25} /><div><strong>Search public GitHub apps.</strong><p>Results are split by real release assets: Windows installers, APKs, macOS packages, Linux packages, and iOS IPAs.</p></div>
+        </div> : results.length ? <div className="results-list">{results.map((item) => <ResultCard key={item.repo || item.id} item={item} platform={platform} device={device} onDetails={setSelectedApp} onDownload={startDownload} />)}</div> : !loading.search && <div className="discovery-empty"><Package size={25} /><div><strong>No matching installable apps found.</strong><p>Try another query or platform.</p></div></div>}
+      </section>
+    </main>
+
+    <footer><span>Nont · GitHub releases, matched to your device.</span><div><a href="https://github.com/voidnont" target="_blank" rel="noreferrer">GitHub</a><a href="https://ko-fi.com/voidnont" target="_blank" rel="noreferrer">Ko-fi</a></div></footer>
+    <DownloadDrawer app={selectedApp} onClose={() => setSelectedApp(null)} onDownload={startDownload} />
+  </div>;
 }
