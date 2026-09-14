@@ -1,8 +1,5 @@
 import React from 'react';
-import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-
-const NONT_ICON = 'https://raw.githubusercontent.com/voidnont/nont/main/src-tauri/icons/icon.png';
 
 function Recovery({ error }) {
   const message = error instanceof Error ? error.message : String(error || 'Unknown error');
@@ -18,10 +15,7 @@ function Recovery({ error }) {
 }
 
 class ErrorBoundary extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = { error: null };
-  }
+  constructor(props) { super(props); this.state = { error: null }; }
   static getDerivedStateFromError(error) { return { error }; }
   componentDidCatch(error, info) { console.error('NONT render failure', error, info); }
   render() { return this.state.error ? <Recovery error={this.state.error} /> : this.props.children; }
@@ -31,28 +25,6 @@ function mount(element) {
   const root = document.getElementById('root');
   if (!root) throw new Error('Root element was not found.');
   createRoot(root).render(<React.StrictMode><ErrorBoundary>{element}</ErrorBoundary></React.StrictMode>);
-}
-
-function HomeWebPlayerLink() {
-  const [target, setTarget] = React.useState(null);
-
-  React.useEffect(() => {
-    const root = document.getElementById('root');
-    if (!root) return undefined;
-    const updateTarget = () => setTarget(document.querySelector('.hero-actions'));
-    updateTarget();
-    const observer = new MutationObserver(updateTarget);
-    observer.observe(root, { childList: true, subtree: true });
-    return () => observer.disconnect();
-  }, []);
-
-  if (!target) return null;
-  return createPortal(
-    <a className="secondary frxe-web-home" href="https://music.nont.me">
-      Open FRXE Web Player
-    </a>,
-    target,
-  );
 }
 
 async function boot() {
@@ -73,21 +45,18 @@ async function boot() {
     return;
   }
 
-  document.title = 'NontHub';
-  favicon.href = NONT_ICON;
+  document.title = 'Nont';
+  favicon.href = '/nont-icon.svg';
   const [{ default: App }] = await Promise.all([
     import('./App.jsx'),
     import('./styles.css'),
     import('./polish.css'),
-    import('./web-player-link.css'),
   ]);
-  mount(<><App /><HomeWebPlayerLink /></>);
+  mount(<App />);
 }
 
 boot().catch((error) => {
   console.error('NONT boot failure', error);
   try { mount(<Recovery error={error} />); }
-  catch {
-    document.body.textContent = `NONT could not start: ${error instanceof Error ? error.message : String(error)}`;
-  }
+  catch { document.body.textContent = `NONT could not start: ${error instanceof Error ? error.message : String(error)}`; }
 });

@@ -1,113 +1,184 @@
 import { expect, test } from '@playwright/test';
 
-const NONT_ICON = 'https://raw.githubusercontent.com/voidnont/nont/main/src-tauri/icons/icon.png';
+const WINDOWS_ASSET = {
+  id: 1,
+  repo: 'voidnont/Frxe-Windows',
+  name: 'Frxe-Desktop-0.1.0-x64.msi',
+  url: 'https://github.com/voidnont/Frxe-Windows/releases/download/v0.1.0/Frxe-Desktop-0.1.0-x64.msi',
+  size: 5505024,
+  platform: 'windows',
+  arch: 'x64',
+  packageType: 'msi',
+  installable: true,
+  score: 45,
+};
 
-function repoPayload(repo, fresh = false) {
-  const versions = {
-    'voidnont/nont': fresh ? '9.9.8' : '0.4.4',
-    'voidnont/Frxe': fresh ? '9.9.9' : '0.5.0',
-    'voidnont/veilbrowser': fresh ? '9.9.7' : '0.8.0',
-  };
-  const version = versions[repo] || '1.0.0';
+const ANDROID_ASSET = {
+  id: 2,
+  repo: 'voidnont/frxe',
+  name: 'frxe-arm64.apk',
+  url: 'https://github.com/voidnont/frxe/releases/download/v1.0.0/frxe-arm64.apk',
+  size: 12000000,
+  platform: 'android',
+  arch: 'arm64',
+  packageType: 'apk',
+  installable: true,
+  score: 45,
+};
+
+function frxeFixture({ android = false } = {}) {
   return {
-    status: 'ready',
-    repo,
-    description: `${repo} test metadata`,
-    sourceVersion: version,
-    releaseVersion: version,
-    sourceAheadOfRelease: false,
-    releaseUrl: `https://github.com/${repo}/releases`,
-    syncedAt: '2026-09-13T00:00:00.000Z',
-    asset: {
-      id: 1,
-      name: `${repo.split('/').pop()}-Setup.exe`,
-      size: 12582912,
-      url: `https://github.com/${repo}/releases/download/v${version}/setup.exe`,
-      type: 'exe',
-    },
+    id: 'frxe',
+    name: 'Frxe',
+    description: 'Frxe test metadata',
+    sources: [
+      { repo: 'voidnont/Frxe-Windows', version: '0.1.0', assets: [WINDOWS_ASSET] },
+      { repo: 'voidnont/frxe', version: android ? '1.0.0' : '', assets: android ? [ANDROID_ASSET] : [] },
+    ],
+    availablePlatforms: android ? ['windows', 'android'] : ['windows'],
+    assets: android ? [WINDOWS_ASSET, ANDROID_ASSET] : [WINDOWS_ASSET],
   };
 }
 
-async function mockHubApis(page, seen = []) {
-  await page.route('**/api/github-sync?repo=*', async (route) => {
+async function setDevice(page, { platform, architecture = '', bitness = '', mobile = false, userAgent = '' }) {
+  await page.addInitScript(({ platform: p, architecture: a, bitness: b, mobile: m, userAgent: ua }) => {
+    Object.defineProperty(navigator, 'userAgentData', {
+      configurable: true,
+      value: {
+        platform: p,
+        mobile: m,
+        getHighEntropyValues: async () => ({ platform: p, architecture: a, bitness: b }),
+      },
+    });
+    Object.defineProperty(navigator, 'platform', { configurable: true, value: p });
+    if (ua) Object.defineProperty(navigator, 'userAgent', { configurable: true, value: ua });
+  }, { platform, architecture, bitness, mobile, userAgent });
+}
+
+async function mockAppHubApis(page, { frxe = frxeFixture(), searchResolver = () => [] } = {}) {
+  await page.route('**/api/github-app?*', async (route) => {
     const url = new URL(route.request().url());
-    const repo = url.searchParams.get('repo') || 'voidnont/nont';
-    const fresh = url.searchParams.get('fresh') === '1';
-    seen.push(url);
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(repoPayload(repo, fresh)) });
+    if (url.searchParams.get('app') === 'frxe') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(frxe) });
+      return;
+    }
+    const repo = url.searchParams.get('repo');
+    const direct = searchResolver(url, { directRepo: repo });
+    const item = Array.isArray(direct) ? direct[0] : direct;
+    await route.fulfill({ status: item ? 200 : 404, contentType: 'application/json', body: JSON.stringify(item || { error: 'not found' }) });
+  });
+  await page.route('**/api/github-search?*', async (route) => {
+    const url = new URL(route.request().url());
+    const items = searchResolver(url) || [];
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items, page: 1, hasMore: false }) });
   });
 }
+
+test('Windows visitor gets Frxe Windows download', async ({ page }) => {
+  await setDevice(page, { platform: 'Windows', architecture: 'x86', bitness: '64', mobile: false, userAgent: 'Windows Test' });
+  await mockAppHubApis(page);
+  await page.goto('/');
+
+  await expect(page).toHaveTitle('Nont');
+  await expect(page.getByText('FRXE', { exact: true }).first()).toBeVisible();
+  const button = page.getByRole('button', { name: /Download Frxe for Windows/i });
+  await expect(button).toBeVisible();
+  await expect(button).toHaveAttribute('data-download-url', WINDOWS_ASSET.url);
+  await expect(page).toHaveURL(/\/$/);
+});
+
+test('Android visitor handles Frxe APK availability', async ({ page }) => {
+  await setDevice(page, { platform: 'Android', architecture: 'arm', bitness: '64', mobile: true, userAgent: 'Android Test' });
+  await mockAppHubApis(page, { frxe: frxeFixture({ android: true }) });
+  await page.goto('/');
+
+  const button = page.getByRole('button', { name: /Download Frxe for Android/i });
+  await expect(button).toBeVisible();
+  await expect(button).toHaveAttribute('data-download-url', ANDROID_ASSET.url);
+});
+
+test('Android visitor sees unavailable state when no APK is published', async ({ page }) => {
+  await setDevice(page, { platform: 'Android', architecture: 'arm', bitness: '64', mobile: true, userAgent: 'Android Test' });
+  await mockAppHubApis(page);
+  await page.goto('/');
+
+  const button = page.getByRole('button', { name: 'Android build not available yet' });
+  await expect(button).toBeVisible();
+  await expect(button).toBeDisabled();
+});
+
+test('unknown device chooses a download manually', async ({ page }) => {
+  await setDevice(page, { platform: 'MysteryOS', userAgent: 'Mystery Browser' });
+  await mockAppHubApis(page);
+  await page.goto('/');
+
+  await expect(page.getByRole('button', { name: 'Choose download' })).toBeVisible();
+  await expect(page.getByText('Unknown device', { exact: false })).toBeVisible();
+});
+
+test('GitHub app search filters by platform', async ({ page }) => {
+  const seen = [];
+  const windowsResult = {
+    repo: 'example/windows-browser', name: 'windows-browser', owner: 'example', description: 'Windows browser',
+    url: 'https://github.com/example/windows-browser', latestVersion: '2.0.0', availablePlatforms: ['windows'], assets: [{ ...WINDOWS_ASSET, repo: 'example/windows-browser', name: 'browser-x64.msi', url: 'https://github.com/example/windows-browser/releases/download/v2/browser-x64.msi' }],
+  };
+  const androidResult = {
+    repo: 'example/android-browser', name: 'android-browser', owner: 'example', description: 'Android browser',
+    url: 'https://github.com/example/android-browser', latestVersion: '3.0.0', availablePlatforms: ['android'], assets: [{ ...ANDROID_ASSET, repo: 'example/android-browser', name: 'browser-arm64.apk', url: 'https://github.com/example/android-browser/releases/download/v3/browser-arm64.apk' }],
+  };
+  await setDevice(page, { platform: 'Windows', architecture: 'x86', bitness: '64', userAgent: 'Windows Test' });
+  await mockAppHubApis(page, {
+    searchResolver: (url) => {
+      if (url.pathname.includes('/api/github-search')) {
+        seen.push(url.toString());
+        return url.searchParams.get('platform') === 'android' ? [androidResult] : [windowsResult, androidResult];
+      }
+      return [];
+    },
+  });
+  await page.goto('/');
+  await page.getByRole('textbox', { name: 'Search GitHub apps' }).fill('browser');
+  await expect(page.getByRole('heading', { name: 'windows-browser' })).toBeVisible();
+  await page.getByRole('tab', { name: 'Android' }).click();
+  await expect(page.getByRole('heading', { name: 'android-browser' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'windows-browser' })).toHaveCount(0);
+  await expect.poll(() => seen.some((value) => new URL(value).searchParams.get('platform') === 'android')).toBe(true);
+});
+
+test('direct owner/repo search resolves repository detail', async ({ page }) => {
+  const directResult = {
+    repo: 'example/tool', name: 'tool', owner: 'example', description: 'Direct repo', url: 'https://github.com/example/tool',
+    version: '1.0.0', latestVersion: '1.0.0', availablePlatforms: ['windows'], assets: [{ ...WINDOWS_ASSET, repo: 'example/tool' }],
+  };
+  let directSeen = false;
+  await setDevice(page, { platform: 'Windows', architecture: 'x86', bitness: '64', userAgent: 'Windows Test' });
+  await mockAppHubApis(page, {
+    searchResolver: (url, context = {}) => {
+      if (context.directRepo === 'example/tool') directSeen = true;
+      return context.directRepo === 'example/tool' ? directResult : [];
+    },
+  });
+  await page.goto('/');
+  await page.getByRole('textbox', { name: 'Search GitHub apps' }).fill('example/tool');
+  await expect(page.getByRole('heading', { name: 'tool' })).toBeVisible();
+  expect(directSeen).toBe(true);
+});
+
+test('mobile app hub has no horizontal overflow', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setDevice(page, { platform: 'Android', architecture: 'arm', bitness: '64', mobile: true, userAgent: 'Android Test' });
+  await mockAppHubApis(page, { frxe: frxeFixture({ android: true }) });
+  await page.goto('/');
+
+  await expect(page.getByRole('textbox', { name: 'Search GitHub apps' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Download Frxe for Android/i })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+});
 
 async function openSave(page) {
   await page.goto('/music');
   await page.locator('.frxe-nav').getByRole('button', { name: 'Save' }).click();
 }
-
-test('Hub exposes Installer with Install and Update modes', async ({ page }) => {
-  await mockHubApis(page);
-  await page.goto('/');
-
-  await expect(page).toHaveTitle('NontHub');
-  await expect(page.getByRole('heading', { name: /Your apps/i })).toBeVisible();
-
-  await page.locator('.sidebar nav').getByRole('button', { name: 'Installer' }).click();
-  await expect(page.getByRole('heading', { name: 'Installer' })).toBeVisible();
-  await expect(page.getByRole('tab', { name: 'Install' })).toHaveAttribute('aria-selected', 'true');
-
-  await page.getByRole('tab', { name: 'Update' }).click();
-  await expect(page.getByRole('tab', { name: 'Update' })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByText('Update your current installation')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Update NontHub/i })).toBeVisible();
-});
-
-test('catalog contains only NontHub, Frxe Web, and Veil while the sidebar has no mini-card', async ({ page }) => {
-  await mockHubApis(page);
-  await page.goto('/');
-
-  await expect(page.locator('.sidebar-bottom .mini')).toHaveCount(0);
-  await expect(page.locator('.app-card')).toHaveCount(3);
-  await expect(page.getByRole('heading', { name: 'NontHub' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'FRXE Web' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Veil Browser' })).toBeVisible();
-
-  await page.locator('.sidebar nav').getByRole('button', { name: 'Library' }).click();
-  await expect(page.locator('.app-card')).toHaveCount(3);
-  await expect(page.getByRole('heading', { name: 'Veil Browser' })).toBeVisible();
-});
-
-test('manual GitHub sync force-refreshes Nont, Frxe, and Veil including Frxe Web version', async ({ page }) => {
-  const seen = [];
-  await mockHubApis(page, seen);
-  await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'FRXE Web' })).toBeVisible();
-
-  seen.length = 0;
-  await page.getByRole('button', { name: 'Sync GitHub' }).click();
-
-  await expect.poll(() => seen
-    .filter((url) => url.searchParams.get('fresh') === '1')
-    .map((url) => url.searchParams.get('repo'))
-    .sort()).toEqual(['voidnont/Frxe', 'voidnont/nont', 'voidnont/veilbrowser']);
-
-  const frxeCard = page.locator('.app-card', { has: page.getByRole('heading', { name: 'FRXE Web' }) });
-  await expect(frxeCard).toContainText('v9.9.9');
-});
-
-test('Nont browser uses the canonical Nont app icon', async ({ page }) => {
-  await mockHubApis(page);
-  await page.goto('/');
-  await expect(page.locator('link[rel="icon"]')).toHaveAttribute('href', NONT_ICON);
-});
-
-test('mobile Hub navigation contains exactly five destinations', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await mockHubApis(page);
-  await page.goto('/');
-
-  const navButtons = page.locator('.sidebar nav .nav-item');
-  await expect(navButtons).toHaveCount(5);
-  await expect(navButtons).toContainText(['Home', 'Library', 'Downloads', 'Installer', 'Settings']);
-});
 
 test('Frxe web player mirrors the five-tab app shell and music ranking', async ({ page }) => {
   await page.route('**/api/youtube-search?*', async (route) => {
@@ -116,28 +187,9 @@ test('Frxe web player mirrors the five-tab app shell and music ranking', async (
       contentType: 'application/json',
       body: JSON.stringify({
         items: [
-          {
-            id: 'lyrics-copy',
-            title: 'Artist - Signal [Lyrics]',
-            artist: 'Artist',
-            thumbnail: 'https://i.ytimg.com/vi/lyrics-copy/hqdefault.jpg',
-            official: false,
-          },
-          {
-            id: 'official-copy',
-            title: 'Artist - Signal (Official Video)',
-            artist: 'Artist - Topic',
-            thumbnail: 'https://i.ytimg.com/vi/official-copy/hqdefault.jpg',
-            official: true,
-            topic: true,
-          },
-          {
-            id: 'reaction',
-            title: 'Signal reaction',
-            artist: 'Random Channel',
-            thumbnail: 'https://i.ytimg.com/vi/reaction/hqdefault.jpg',
-            official: false,
-          },
+          { id: 'lyrics-copy', title: 'Artist - Signal [Lyrics]', artist: 'Artist', thumbnail: 'https://i.ytimg.com/vi/lyrics-copy/hqdefault.jpg', official: false },
+          { id: 'official-copy', title: 'Artist - Signal (Official Video)', artist: 'Artist - Topic', thumbnail: 'https://i.ytimg.com/vi/official-copy/hqdefault.jpg', official: true, topic: true },
+          { id: 'reaction', title: 'Signal reaction', artist: 'Random Channel', thumbnail: 'https://i.ytimg.com/vi/reaction/hqdefault.jpg', official: false },
         ],
       }),
     });
