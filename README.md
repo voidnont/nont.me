@@ -19,7 +19,9 @@ GitHub requests are performed by server-side Vercel functions. Set the optional 
 
 ## FRXE web player
 
-`/music` and `music.nont.me` remain the FRXE web player, including music search, playback, library, and the server-side Cobalt Save bridge.
+The FRXE web player is served from both `music.nont.me` and `frxe.nont.me`, and remains available at the `/music` route on the main site. It includes music search, playback, library, and the server-side extractor pipeline used by FRXE Save.
+
+Both subdomains are handled by the same web build; each hostname must be attached to the same production project/domain configuration for public DNS traffic to reach it.
 
 ## Development
 
@@ -31,4 +33,4 @@ npm run build
 npm run test:e2e
 ```
 
-The Vercel production build runs validation before Vite builds the site. GitHub Actions also runs validation, unit tests, the production build, and Playwright browser tests.
+The Vercel production build runs validation before Vite builds the site. GitHub Actions also runs validation, JavaScript unit tests, extractor-worker tests, the production build, and Playwright browser tests.
