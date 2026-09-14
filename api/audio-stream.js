@@ -1,7 +1,16 @@
 const REQUEST_TIMEOUT_MS = 25000;
 const VIDEO_ID_RE = /^[A-Za-z0-9_-]{6,20}$/;
+const MEDIA_HEADERS = [
+  'content-type',
+  'content-length',
+  'content-range',
+  'accept-ranges',
+  'etag',
+  'last-modified',
+  'cache-control',
+];
 
-function configuredWorker() {
+function configuredWorker(videoId) {
   const raw = String(process.env.EXTRACTOR_WORKER_URL || '').trim();
   if (!raw) throw new Error('EXTRACTOR_WORKER_URL is not configured.');
   const url = new URL(raw);
@@ -9,7 +18,7 @@ function configuredWorker() {
   if (url.protocol !== 'https:' && !(url.protocol === 'http:' && local)) {
     throw new Error('EXTRACTOR_WORKER_URL must use HTTPS (HTTP is allowed only for local development).');
   }
-  url.pathname = `${url.pathname.replace(/\/+$/, '')}/extract`;
+  url.pathname = `${url.pathname.replace(/\/+$/, '')}/stream/${encodeURIComponent(videoId)}`;
   url.search = '';
   url.hash = '';
   return url.toString();
@@ -27,17 +36,21 @@ function videoIdFromRequest(req) {
   return id;
 }
 
-function playableAudioUrl(data) {
-  const candidates = data?.status === 'ready'
-    ? [data]
-    : data?.status === 'picker' && Array.isArray(data.items)
-      ? data.items
-      : [];
-  const item = candidates.find((entry) => entry?.type === 'audio' && entry?.url) || candidates.find((entry) => entry?.url);
-  if (!item?.url) return '';
-  const url = new URL(String(item.url));
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') return '';
-  return url.toString();
+function copyMediaHeaders(upstream, res) {
+  for (const name of MEDIA_HEADERS) {
+    const value = upstream.headers?.get?.(name);
+    if (value) res.setHeader(name, value);
+  }
+}
+
+async function workerError(upstream) {
+  const contentType = String(upstream.headers?.get?.('content-type') || '');
+  if (contentType.includes('json')) {
+    const data = await upstream.json().catch(() => ({}));
+    return String(data?.detail || data?.error || `Audio worker returned ${upstream.status}.`).slice(0, 500);
+  }
+  const text = await upstream.text().catch(() => '');
+  return String(text || `Audio worker returned ${upstream.status}.`).slice(0, 500);
 }
 
 export default async function handler(req, res) {
@@ -54,38 +67,33 @@ export default async function handler(req, res) {
   }
 
   try {
-    const upstream = await fetch(configuredWorker(), {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${workerToken()}`,
-        'User-Agent': 'FRXE-Web/1.0 (+https://music.nont.me)',
-      },
-      body: JSON.stringify({
-        url: `https://www.youtube.com/watch?v=${id}`,
-        downloadMode: 'audio',
-        audioFormat: 'best',
-        audioBitrate: '320',
-        videoQuality: '1080',
-      }),
+    const headers = {
+      Accept: '*/*',
+      Authorization: `Bearer ${workerToken()}`,
+      'User-Agent': 'FRXE-Web/0.6.9 (+https://music.nont.me)',
+    };
+    if (req.headers?.range) headers.Range = String(req.headers.range);
+
+    const upstream = await fetch(configuredWorker(id), {
+      method: 'GET',
+      headers,
       redirect: 'error',
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
-    const data = await upstream.json().catch(() => ({}));
     if (!upstream.ok) {
-      return res.status(502).json({ error: String(data?.error || data?.detail || `Audio worker returned ${upstream.status}.`).slice(0, 500) });
+      return res.status(502).json({ error: await workerError(upstream) });
+    }
+    if (!upstream.body) {
+      return res.status(502).json({ error: 'Audio worker returned an empty media stream.' });
     }
 
-    const streamUrl = playableAudioUrl(data);
-    if (!streamUrl) {
-      const message = data?.message || 'No playable background audio stream was returned for this track.';
-      return res.status(502).json({ error: String(message).slice(0, 500) });
-    }
+    res.statusCode = upstream.status;
+    copyMediaHeaders(upstream, res);
+    if (!upstream.headers?.get?.('cache-control')) res.setHeader('Cache-Control', 'private, no-store');
 
-    res.setHeader('Cache-Control', 'private, no-store');
-    return res.redirect(302, streamUrl);
+    for await (const chunk of upstream.body) res.write(chunk);
+    return res.end();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (/EXTRACTOR_WORKER_(URL|TOKEN)/.test(message)) {
