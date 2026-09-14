@@ -18,7 +18,8 @@
       "Updates",
       "Settings",
       "Icon fixes"
-    ]
+    ],
+    "syncError": "https://api.github.com/repos/voidnont/nont returned 404"
   },
   "voidnont/Frxe": {
     "repo": "voidnont/Frxe",
