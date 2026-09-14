@@ -26,6 +26,6 @@ test('0.6.9 composition wires discovery taxonomy and playlists', () => {
 });
 
 test('0.6.9 composition uses the background relay error message instead of embedded YouTube copy', () => {
-  assert.match(app, /event\.message/);
+  assert.match(app, /event\??\.message/);
   assert.doesNotMatch(app, /embedded YouTube player/);
 });
