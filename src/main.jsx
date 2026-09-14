@@ -41,7 +41,7 @@ async function boot() {
     document.documentElement.removeAttribute('data-theme');
     installBackgroundAudioPlayer();
     const [{ default: MusicApp }] = await Promise.all([
-      import('./music/MusicApp.tsx'),
+      import('./music/MusicApp069.tsx'),
       import('./music/music.css'),
     ]);
     mount(<MusicApp />);
