@@ -1,6 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { isFrxeWebLocation } from './site-mode.js';
+import { installBackgroundAudioPlayer } from './music/backgroundAudioPlayer.js';
 
 function Recovery({ error }) {
   const message = error instanceof Error ? error.message : String(error || 'Unknown error');
@@ -38,6 +39,7 @@ async function boot() {
     document.title = 'FRXE';
     favicon.href = '/frxe-icon.svg';
     document.documentElement.removeAttribute('data-theme');
+    installBackgroundAudioPlayer();
     const [{ default: MusicApp }] = await Promise.all([
       import('./music/MusicApp.tsx'),
       import('./music/music.css'),
