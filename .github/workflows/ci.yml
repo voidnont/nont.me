@@ -28,6 +28,11 @@ jobs:
           cache: npm
           cache-dependency-path: package.json
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
@@ -36,6 +41,9 @@ jobs:
 
       - name: Unit test shared music logic
         run: npm run test:unit
+
+      - name: Unit test extractor worker core
+        run: python -m unittest discover -s extractor-worker/tests -v
 
       - name: Build production bundle
         run: npm run build
