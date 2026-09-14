@@ -15,6 +15,13 @@ export function buildBackgroundStreamUrl(videoId) {
   return `/api/audio-stream?id=${encodeURIComponent(id)}`;
 }
 
+export function describePlaybackError(error) {
+  const name = String(error?.name || '');
+  if (name === 'NotAllowedError') return 'Tap Play again to allow FRXE background audio playback.';
+  if (name === 'NotSupportedError') return 'FRXE could not play this background audio stream.';
+  return 'FRXE background audio playback failed. Try this track again.';
+}
+
 function safeCall(fn, payload) {
   if (typeof fn !== 'function') return;
   try { fn(payload); } catch { /* consumer callback */ }
@@ -57,7 +64,11 @@ export function createBackgroundAudioPlayerClass({ document, queueMicrotask = gl
       };
       this.onError = (event) => {
         mediaSessionState('paused');
-        safeCall(this.options.events?.onError, { target: this, data: event });
+        safeCall(this.options.events?.onError, {
+          target: this,
+          data: event,
+          message: describePlaybackError(event),
+        });
       };
 
       this.audio.addEventListener('play', this.onPlay);
