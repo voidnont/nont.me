@@ -27,5 +27,5 @@ function collect(dir = '.') {
 
 test('retired third-party fallback has no repository references', () => {
   const hits = collect();
-  assert.deepEqual(hits, [], `Remove retired fallback references:\n${hits.join('\n')}`);
+  assert.deepEqual(hits, [], `Remove every retired fallback reference:\n${hits.join('\n')}`);
 });
