@@ -38,6 +38,11 @@ async function mockHubApis(page, seen = []) {
   });
 }
 
+async function openSave(page) {
+  await page.goto('/music');
+  await page.locator('.frxe-nav').getByRole('button', { name: 'Save' }).click();
+}
+
 test('Hub exposes Installer with Install and Update modes', async ({ page }) => {
   await mockHubApis(page);
   await page.goto('/');
@@ -165,31 +170,84 @@ test('Frxe web player mirrors the five-tab app shell and music ranking', async (
   await expect(page.getByText('NOW PLAYING', { exact: true })).toBeVisible();
 });
 
-
-test('FRXE Save uses the Cobalt bridge', async ({ page }) => {
-  let requestBody = null;
-  await page.route('**/api/cobalt-download', async (route) => {
-    requestBody = route.request().postDataJSON();
+test('FRXE Save uses media extraction directly', async ({ page }) => {
+  let extractBody = null;
+  await page.route('**/api/media-extract', async (route) => {
+    extractBody = route.request().postDataJSON();
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ status: 'picker', items: [{ type: 'video', url: 'https://media.example/item.mp4' }] }),
+      body: JSON.stringify({
+        status: 'picker',
+        extractor: 'innertube',
+        items: [{ type: 'audio', url: 'https://media.example/song.m4a', filename: 'song.m4a' }],
+      }),
     });
   });
 
-  await page.goto('/music');
-  await page.locator('.frxe-nav').getByRole('button', { name: 'Save' }).click();
-  await expect(page.getByText('Frxe Save · Cobalt')).toBeVisible();
-  await expect(page.getByRole('combobox', { name: 'Download mode' })).toHaveValue('audio');
+  await openSave(page);
+  await expect(page.getByText('Frxe Save · Extractors')).toBeVisible();
   await page.getByLabel('Media URL').fill('https://www.youtube.com/watch?v=example');
-  await page.getByRole('button', { name: 'Download with Cobalt' }).click();
+  await page.getByRole('button', { name: 'Save media' }).click();
 
-  await expect.poll(() => requestBody).toMatchObject({
+  await expect.poll(() => extractBody).toMatchObject({
     url: 'https://www.youtube.com/watch?v=example',
     downloadMode: 'audio',
     audioFormat: 'mp3',
     videoQuality: '1080',
   });
-  await expect(page.getByText('Choose an item')).toBeVisible();
-  await expect(page.getByRole('link', { name: /video 1/i })).toHaveAttribute('href', 'https://media.example/item.mp4');
+  await expect(page.getByText(/innertube found 1 downloadable item/i)).toBeVisible();
+  await expect(page.getByRole('link', { name: /song\.m4a/i })).toHaveAttribute('href', 'https://media.example/song.m4a');
+});
+
+test('FRXE Save shows unresolved extraction without another fallback', async ({ page }) => {
+  await page.route('**/api/media-extract', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'error',
+        message: 'InnerTube and yt-dlp could not extract this media.',
+        sourceUrl: 'https://example.com/watch/1',
+        extractor: 'yt-dlp',
+      }),
+    });
+  });
+
+  await openSave(page);
+  await page.getByLabel('Media URL').fill('https://example.com/watch/1');
+  await page.getByRole('button', { name: 'Save media' }).click();
+  await expect(page.getByText('InnerTube and yt-dlp could not extract this media.')).toBeVisible();
+});
+
+test('FRXE Save surfaces provider challenge with Open source and Retry', async ({ page }) => {
+  let extractCalls = 0;
+  await page.route('**/api/media-extract', async (route) => {
+    extractCalls += 1;
+    const body = extractCalls === 1
+      ? {
+          status: 'challenge',
+          challenge: 'captcha_required',
+          message: 'Please complete the CAPTCHA on the source site.',
+          sourceUrl: 'https://example.com/watch/1',
+          extractor: 'yt-dlp',
+        }
+      : {
+          status: 'picker',
+          extractor: 'yt-dlp',
+          items: [{ type: 'video', url: 'https://media.example/after-retry.mp4', filename: 'after-retry.mp4' }],
+        };
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  });
+
+  await openSave(page);
+  await page.getByLabel('Media URL').fill('https://example.com/watch/1');
+  await page.getByRole('button', { name: 'Save media' }).click();
+
+  const challengeCard = page.locator('.frxe-save-picker', { has: page.getByText(/Action required/i) });
+  await expect(challengeCard.getByText('Please complete the CAPTCHA on the source site.')).toBeVisible();
+  await expect(challengeCard.getByRole('link', { name: 'Open source' })).toHaveAttribute('href', 'https://example.com/watch/1');
+  await challengeCard.getByRole('button', { name: 'Retry' }).click();
+  await expect.poll(() => extractCalls).toBe(2);
+  await expect(page.getByText(/yt-dlp found 1 downloadable item/i)).toBeVisible();
 });

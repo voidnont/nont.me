@@ -28,14 +28,27 @@ jobs:
           cache: npm
           cache-dependency-path: package.json
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: |
+          npm install --no-audit --no-fund
+          python -m pip install -r extractor-worker/requirements.txt
 
       - name: Validate project invariants
         run: npm run check
 
       - name: Unit test shared music logic
         run: npm run test:unit
+
+      - name: Unit test extractor worker core
+        run: python -m unittest discover -s extractor-worker/tests -v
+
+      - name: Compile extractor worker
+        run: python -m py_compile extractor-worker/core.py extractor-worker/pipeline.py extractor-worker/extractors.py extractor-worker/app.py
 
       - name: Build production bundle
         run: npm run build

@@ -51,6 +51,13 @@ type PlayerSettings = {
   glass: GlassMode;
 };
 
+type SaveChallenge = {
+  challenge: string;
+  message: string;
+  sourceUrl: string;
+  extractor?: string;
+};
+
 const FRXE_REPO = 'https://github.com/voidnont/Frxe';
 const FRXE_SOURCE_VERSION = '0.6.7';
 const LIBRARY_KEY = 'frxe.web.library.v1';
@@ -153,6 +160,7 @@ export default function MusicApp() {
   const [saveAudioFormat, setSaveAudioFormat] = useState<'best' | 'mp3' | 'ogg' | 'wav' | 'opus'>('mp3');
   const [saveVideoQuality, setSaveVideoQuality] = useState('1080');
   const [saveItems, setSaveItems] = useState<Array<{ type: string; url: string; thumb?: string; filename?: string }>>([]);
+  const [saveChallenge, setSaveChallenge] = useState<SaveChallenge | null>(null);
 
   const libraryIds = useMemo(() => new Set(library.map((track) => track.id)), [library]);
   const homeSignal = useMemo(() => uniqueTracks([...history, ...library, ...results]).slice(0, 12), [history, library, results]);
@@ -378,14 +386,25 @@ export default function MusicApp() {
     await runSearch(query);
   }
 
-  async function saveDirectMedia(event: FormEvent) {
-    event.preventDefault();
+  function openDownload(url: string, filename?: string) {
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.target = '_blank';
+    anchor.rel = 'noopener noreferrer';
+    if (filename) anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  }
+
+  async function runSaveMedia() {
     if (saveBusy || !saveUrl.trim()) return;
     setSaveBusy(true);
     setSaveStatus('');
     setSaveItems([]);
+    setSaveChallenge(null);
     try {
-      const response = await fetch('/api/cobalt-download', {
+      const response = await fetch('/api/media-extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -397,33 +416,50 @@ export default function MusicApp() {
         }),
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || `Cobalt request failed (${response.status}).`);
+      if (!response.ok) throw new Error(data.error || `Media extraction failed (${response.status}).`);
+
+      if (data.status === 'ready' && data.url) {
+        openDownload(data.url, data.filename);
+        setSaveStatus(data.filename
+          ? `Download ready via ${data.extractor || 'extractor'}: ${data.filename}`
+          : `Download ready via ${data.extractor || 'extractor'}.`);
+        return;
+      }
 
       if (data.status === 'picker' && Array.isArray(data.items)) {
         setSaveItems(data.items);
-        setSaveStatus(`Cobalt found ${data.items.length} downloadable item${data.items.length === 1 ? '' : 's'}.`);
+        setSaveStatus(`${data.extractor || 'Extractor'} found ${data.items.length} downloadable item${data.items.length === 1 ? '' : 's'}.`);
         return;
       }
 
-      if ((data.status === 'tunnel' || data.status === 'redirect') && data.url) {
-        const anchor = document.createElement('a');
-        anchor.href = data.url;
-        anchor.target = '_blank';
-        anchor.rel = 'noopener noreferrer';
-        if (data.filename) anchor.download = data.filename;
-        document.body.appendChild(anchor);
-        anchor.click();
-        anchor.remove();
-        setSaveStatus(data.filename ? `Download ready: ${data.filename}` : 'Download ready through Cobalt.');
+      if (data.status === 'challenge' && data.sourceUrl) {
+        const challenge = {
+          challenge: String(data.challenge || 'action_required'),
+          message: String(data.message || 'The source requires an action before extraction can continue.'),
+          sourceUrl: String(data.sourceUrl),
+          extractor: data.extractor ? String(data.extractor) : undefined,
+        };
+        setSaveChallenge(challenge);
+        setSaveStatus(challenge.message);
         return;
       }
 
-      throw new Error('Cobalt returned an unsupported response.');
+      if (data.status === 'error') {
+        setSaveStatus(String(data.message || 'InnerTube and yt-dlp could not extract this media.'));
+        return;
+      }
+
+      throw new Error('Extractor returned an unsupported response.');
     } catch (error) {
       setSaveStatus(error instanceof Error ? error.message : String(error));
     } finally {
       setSaveBusy(false);
     }
+  }
+
+  async function saveDirectMedia(event: FormEvent) {
+    event.preventDefault();
+    await runSaveMedia();
   }
 
   const ambientStyle = current?.thumbnail
@@ -506,12 +542,12 @@ export default function MusicApp() {
         {tab === 'save' && (
           <section className="frxe-screen">
             <header className="frxe-heading compact">
-              <div><h2>Save</h2><p>Paste a supported public media link and download it through your configured Cobalt instance.</p></div>
+              <div><h2>Save</h2><p>Paste a supported public media link. FRXE tries InnerTube first, then yt-dlp.</p></div>
             </header>
             <Glass className="frxe-save-card" strong>
               <div className="frxe-save-preview">
                 <div className="frxe-generated-art"><Download size={28} /></div>
-                <div><strong>Frxe Save · Cobalt</strong><span>Server-side Cobalt bridge · no API key exposed to the browser</span></div>
+                <div><strong>Frxe Save · Extractors</strong><span>InnerTube first · yt-dlp second · challenges stay with you</span></div>
               </div>
               <form onSubmit={saveDirectMedia}>
                 <label htmlFor="frxe-save-url">Media URL</label>
@@ -549,14 +585,30 @@ export default function MusicApp() {
                   </label>
                 </div>
                 <button className="frxe-primary wide" disabled={saveBusy || !saveUrl.trim()}>
-                  {saveBusy ? <Loader2 className="frxe-spin" size={18} /> : <Download size={18} />} Download with Cobalt
+                  {saveBusy ? <Loader2 className="frxe-spin" size={18} /> : <Download size={18} />} Save media
                 </button>
               </form>
             </Glass>
             <Glass className="frxe-save-status">
               <strong>Web Save status</strong>
-              <p>{saveStatus || 'Downloads use the Cobalt instance configured on nont.me. Only save media you are allowed to download.'}</p>
+              <p>{saveStatus || 'FRXE uses InnerTube and yt-dlp for public media. Only save media you are allowed to download.'}</p>
             </Glass>
+            {saveChallenge && (
+              <Glass className="frxe-save-picker" strong>
+                <strong>Action required · {saveChallenge.challenge.replaceAll('_', ' ')}</strong>
+                <p>{saveChallenge.message}</p>
+                <div className="frxe-save-picker-grid">
+                  <a href={saveChallenge.sourceUrl} target="_blank" rel="noreferrer" className="frxe-save-picker-item">
+                    <ExternalLink size={20} />
+                    <span>Open source</span>
+                  </a>
+                  <button type="button" className="frxe-save-picker-item" onClick={runSaveMedia} disabled={saveBusy}>
+                    {saveBusy ? <Loader2 className="frxe-spin" size={20} /> : <Download size={20} />}
+                    <span>Retry</span>
+                  </button>
+                </div>
+              </Glass>
+            )}
             {saveItems.length > 0 && (
               <Glass className="frxe-save-picker" strong>
                 <strong>Choose an item</strong>
