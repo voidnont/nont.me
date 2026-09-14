@@ -664,13 +664,19 @@ export default function MusicApp() {
       </main>
 
       {current && !playerOpen && (
-        <Glass className="frxe-mini-player" strong>
+        <div className="frxe-glass strong frxe-mini-player" style={{ gridTemplateColumns: 'minmax(0,1fr) auto' }}>
           <button className="frxe-mini-main" onClick={() => setPlayerOpen(true)}>
             <img src={current.thumbnail} alt="" />
             <span><strong>{current.title}</strong><small>{current.artist}</small></span>
           </button>
-          <button className="frxe-icon-button" aria-label={playing ? 'Pause' : 'Play'} onClick={togglePlay}>{playing ? <Pause size={21} fill="currentColor" /> : <Play size={21} fill="currentColor" />}</button>
-        </Glass>
+          <div className="frxe-mini-controls" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, flexWrap: 'wrap', maxWidth: 250 }}>
+            <button className="frxe-icon-button small" aria-label="Previous track" onClick={() => move(-1)}><SkipBack size={17} fill="currentColor" /></button>
+            <button className="frxe-icon-button small" aria-label={playing ? 'Pause' : 'Play'} onClick={togglePlay}>{playing ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}</button>
+            <button className="frxe-icon-button small" aria-label="Next track" onClick={() => move(1)}><SkipForward size={17} fill="currentColor" /></button>
+            <button className="frxe-icon-button small" aria-label={muted ? 'Unmute' : 'Mute'} onClick={() => setMuted((value) => !value)}>{muted ? <VolumeX size={17} /> : <Volume2 size={17} />}</button>
+            <input aria-label="Mini player volume" type="range" min="0" max="100" value={volume} onChange={(event) => setVolume(Number(event.target.value))} style={{ width: 72, accentColor: '#fff' }} />
+          </div>
+        </div>
       )}
 
       {!playerOpen && (
