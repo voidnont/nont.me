@@ -15,7 +15,6 @@ The root site automatically selects a compatible release for Windows, Android, m
 
 The root site supports free-text GitHub repository search and direct `owner/repo` input. Platform labels come from actual release files rather than README claims. Supported package detection includes Windows installers, APK/AAB, DMG/PKG, AppImage/DEB/RPM/Flatpak/Snap, IPA, and architecture markers such as x64 and arm64.
 
-GitHub requests are performed by server-side Vercel functions. Set the optional `GITHUB_TOKEN` environment variable for higher GitHub API rate limits. The token is never sent to browser code.
 
 ## FRXE web player
 
