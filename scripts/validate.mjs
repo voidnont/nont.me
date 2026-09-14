@@ -25,7 +25,7 @@ const vercel = read('vercel.json');
 expect(pkg.version === versionFile, `package.json (${pkg.version}) and VERSION (${versionFile}) must match`);
 expect(!fs.existsSync('api/github-sync.js'), 'obsolete fixed GitHub sync endpoint must stay removed');
 
-const forbiddenDeletedRepo = 'voidnont/nont';
+const forbiddenDeletedRepo = ['voidnont', 'nont'].join('/');
 for (const [label, text] of [
   ['root app', app],
   ['root bootstrap', main],
@@ -34,7 +34,7 @@ for (const [label, text] of [
   ['root browser tests', e2e],
   ['public HTML', index],
 ]) {
-  expect(!text.toLowerCase().includes(forbiddenDeletedRepo), `${label} must not depend on deleted voidnont/nont`);
+  expect(!text.toLowerCase().includes(forbiddenDeletedRepo), `${label} must not depend on the deleted root app repository`);
 }
 
 for (const path of ['shared/github-repo.js', 'shared/release-classifier.js', 'shared/frxe-app.js', 'server/github.js', 'api/github-search.js', 'api/github-app.js', 'api/github-release.js', 'src/device.js']) {
