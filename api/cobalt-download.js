@@ -1,4 +1,9 @@
 import { buildCobaltPayload, normalizeCobaltResponse } from '../src/shared/cobalt.js';
+import {
+  COBALT_COOKIE_NAME,
+  decryptCobaltKey,
+  parseCookies,
+} from '../src/server/cobaltKeyCookie.js';
 
 const REQUEST_TIMEOUT_MS = 20000;
 const FORWARDED_RATE_HEADERS = ['ratelimit-limit', 'ratelimit-remaining', 'ratelimit-reset', 'retry-after'];
@@ -16,9 +21,17 @@ function configuredEndpoint() {
   return url.toString();
 }
 
-function authHeader() {
-  const key = String(process.env.COBALT_API_KEY || '').trim();
-  if (!key) return null;
+function authHeader(req) {
+  const secret = String(process.env.COBALT_COOKIE_SECRET || '');
+  if (secret.length < 32) throw new Error('COBALT_COOKIE_SECRET must be configured with at least 32 characters.');
+  const cookies = parseCookies(req.headers?.cookie || '');
+  const encrypted = cookies[COBALT_COOKIE_NAME];
+  const key = encrypted ? decryptCobaltKey(encrypted, secret) : null;
+  if (!key) {
+    const error = new Error('Save your Cobalt API key first.');
+    error.code = 'cobalt_key_required';
+    throw error;
+  }
   const scheme = String(process.env.COBALT_AUTH_SCHEME || 'Api-Key').trim();
   return `${scheme || 'Api-Key'} ${key}`;
 }
@@ -44,9 +57,8 @@ export default async function handler(req, res) {
       Accept: 'application/json',
       'Content-Type': 'application/json',
       'User-Agent': 'FRXE-Web/1.0 (+https://music.nont.me)',
+      Authorization: authHeader(req),
     };
-    const authorization = authHeader();
-    if (authorization) headers.Authorization = authorization;
 
     const upstream = await fetch(endpoint, {
       method: 'POST',
@@ -73,7 +85,8 @@ export default async function handler(req, res) {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const status = /not configured|COBALT_API_URL/i.test(message) ? 503 : 400;
+    if (error?.code === 'cobalt_key_required') return res.status(401).json({ error: message, code: 'cobalt_key_required' });
+    const status = /not configured|COBALT_API_URL|COBALT_COOKIE_SECRET/i.test(message) ? 503 : 400;
     return res.status(status).json({ error: message });
   }
 }
