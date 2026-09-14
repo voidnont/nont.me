@@ -79,20 +79,30 @@ export function buildRecommendationSeeds({ history = [], library = [], recentSea
 }
 
 export function buildColdStartSeeds(keyValue = '', limit = 6) {
+  const cap = Math.max(0, Number(limit) || 0);
+  if (!cap) return [];
   const size = Math.max(1, COLD_GENRES.length);
   const offset = stableHash(keyValue) % size;
-  const genres = [];
-  for (let index = 0; index < Math.min(limit, COLD_GENRES.length); index += 1) {
+  const reserveWildcard = cap >= 2 ? 1 : 0;
+  const genreSlots = Math.min(cap - reserveWildcard, COLD_GENRES.length);
+  const seeds = [];
+
+  for (let index = 0; index < genreSlots; index += 1) {
     const name = COLD_GENRES[(offset + index) % size];
-    genres.push({ id: `genre:${slug(name)}`, kind: 'genre', label: name, query: `${name} music`, weight: SIGNAL_WEIGHTS.genre });
+    seeds.push({ id: `genre:${slug(name)}`, kind: 'genre', label: name, query: `${name} music`, weight: SIGNAL_WEIGHTS.genre });
   }
-  if (genres.length < limit) {
-    for (let index = 0; index < WILDCARDS.length && genres.length < limit; index += 1) {
-      const query = WILDCARDS[(offset + index) % WILDCARDS.length];
-      genres.push({ id: `wildcard:${slug(query)}`, kind: 'wildcard', label: query, query, weight: SIGNAL_WEIGHTS.wildcard });
-    }
+
+  if (reserveWildcard) {
+    const query = WILDCARDS[offset % WILDCARDS.length];
+    seeds.push({ id: `wildcard:${slug(query)}`, kind: 'wildcard', label: query.replace(/\b\w/g, (char) => char.toUpperCase()), query, weight: SIGNAL_WEIGHTS.wildcard });
   }
-  return genres.slice(0, Math.max(0, limit));
+
+  for (let index = 0; seeds.length < cap && index < WILDCARDS.length; index += 1) {
+    const query = WILDCARDS[(offset + index) % WILDCARDS.length];
+    if (seeds.some((seed) => seed.query === query)) continue;
+    seeds.push({ id: `wildcard:${slug(query)}`, kind: 'wildcard', label: query.replace(/\b\w/g, (char) => char.toUpperCase()), query, weight: SIGNAL_WEIGHTS.wildcard });
+  }
+  return seeds.slice(0, cap);
 }
 
 export function diversifyTracks(tracks, { artistCap = 2, limit = 12, excludeIds = [] } = {}) {
