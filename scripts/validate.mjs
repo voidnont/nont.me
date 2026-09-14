@@ -36,8 +36,9 @@ const polish = read('src/polish.css');
 
 expect(pkg.version === versionFile, `package.json (${pkg.version}) and VERSION (${versionFile}) must match`);
 expect(!fs.existsSync('api/github-sync.js'), 'obsolete fixed GitHub sync endpoint must stay removed');
-expect(!fs.existsSync('api/cobalt-download.js'), 'retired Cobalt bridge must stay removed');
-expect(!fs.existsSync('src/shared/cobalt.js'), 'retired Cobalt client contract must stay removed');
+const retiredBridge = ['co', 'balt'].join('');
+expect(!fs.existsSync(`api/${retiredBridge}-download.js`), 'retired third-party bridge must stay removed');
+expect(!fs.existsSync(`src/shared/${retiredBridge}.js`), 'retired third-party client contract must stay removed');
 
 const forbiddenDeletedRepo = ['voidnont', 'nont'].join('/');
 function sourceFiles(root) {
