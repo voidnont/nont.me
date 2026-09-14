@@ -58,9 +58,11 @@ test('diversifyTracks de-duplicates ids and caps one artist at two tracks', () =
   assert.ok(output.filter((track) => track.artist === 'Daft Punk').length <= 2);
 });
 
-test('cold start seeds are deterministic and genre-mixed', () => {
-  assert.deepEqual(buildColdStartSeeds('2026-W38', 6), buildColdStartSeeds('2026-W38', 6));
-  assert.ok(buildColdStartSeeds('2026-W38', 6).some((seed) => seed.kind === 'genre'));
+test('cold start seeds are deterministic and mix genres with wildcard discovery', () => {
+  const seeds = buildColdStartSeeds('2026-W38', 6);
+  assert.deepEqual(seeds, buildColdStartSeeds('2026-W38', 6));
+  assert.ok(seeds.some((seed) => seed.kind === 'genre'));
+  assert.ok(seeds.some((seed) => seed.kind === 'wildcard'));
 });
 
 test('recommendation signature changes with listening signals', () => {
