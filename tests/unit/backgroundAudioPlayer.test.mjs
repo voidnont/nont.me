@@ -72,3 +72,37 @@ test('background player maps load/play/pause/seek/volume to one HTML audio eleme
   assert.ok(events.includes(PLAYER_STATES.PLAYING));
   assert.ok(events.includes(PLAYER_STATES.PAUSED));
 });
+
+test('background player reports a useful relay playback error', async () => {
+  const messages = [];
+  const audio = {
+    src: '',
+    preload: '',
+    playsInline: false,
+    volume: 1,
+    muted: false,
+    currentTime: 0,
+    duration: 0,
+    ended: false,
+    listeners: new Map(),
+    addEventListener(name, fn) { this.listeners.set(name, fn); },
+    remove() {},
+    load() {},
+    play() { return Promise.reject(new DOMException('play() failed', 'NotSupportedError')); },
+    pause() {},
+  };
+  const document = {
+    createElement() { return audio; },
+    getElementById() { return { appendChild() {} }; },
+  };
+  const Player = createBackgroundAudioPlayerClass({ document, queueMicrotask: (fn) => fn() });
+  const player = new Player('player', {
+    events: { onError: ({ message }) => messages.push(message) },
+  });
+
+  player.loadVideoById('dQw4w9WgXcQ');
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.match(messages[0], /background audio|stream|playback/i);
+  assert.doesNotMatch(messages[0], /embedded YouTube player/i);
+});

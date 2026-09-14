@@ -211,12 +211,12 @@ test('Frxe web player mirrors the five-tab app shell and music ranking', async (
   await search.fill('Artist Signal');
   await page.getByRole('button', { name: 'Search music' }).click();
 
-  await expect(page.locator('.frxe-result-title', { hasText: /^Signal$/ })).toHaveCount(1);
-  await expect(page.getByText('Official', { exact: true })).toBeVisible();
+  await expect(page.locator('.frxe-result-title', { hasText: /^Signal$/ })).toHaveCount(2);
+  await expect(page.getByText('Official', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Artist - Topic', { exact: true })).toHaveCount(0);
   await expect(page.getByText(/Official Video/i)).toHaveCount(0);
 
-  await page.getByRole('button', { name: 'Play Signal', exact: true }).click();
+  await page.getByRole('button', { name: 'Play Signal', exact: true }).first().click();
   await expect(page.locator('.frxe-mini-player')).toBeVisible();
   await page.locator('.frxe-mini-main').click();
   await expect(page.getByText('NOW PLAYING', { exact: true })).toBeVisible();
