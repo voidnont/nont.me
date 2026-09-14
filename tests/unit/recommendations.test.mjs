@@ -31,6 +31,22 @@ test('recommendation seeds combine played saved genre and wildcard signals', () 
   assert.ok(seeds.find((seed) => seed.kind === 'artist').weight > seeds.find((seed) => seed.kind === 'wildcard').weight);
 });
 
+test('top six home seeds stay mixed even with many familiar artists', () => {
+  const crowdedHistory = Array.from({ length: 8 }, (_, index) => ({
+    id: `crowded-${index}`,
+    title: `Song ${index}`,
+    artist: `Artist ${index}`,
+  }));
+  const top = buildRecommendationSeeds({
+    history: crowdedHistory,
+    library: crowdedHistory.slice(0, 3),
+    recentSearches: ['electronic'],
+  }).slice(0, 6);
+  assert.ok(top.some((seed) => seed.kind === 'artist' || seed.kind === 'track'));
+  assert.ok(top.some((seed) => seed.kind === 'genre'));
+  assert.ok(top.some((seed) => seed.kind === 'wildcard'));
+});
+
 test('diversifyTracks de-duplicates ids and caps one artist at two tracks', () => {
   const input = [
     { id: '1', artist: 'Daft Punk' }, { id: '1', artist: 'Daft Punk' },
