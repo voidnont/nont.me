@@ -164,3 +164,32 @@ test('Frxe web player mirrors the five-tab app shell and music ranking', async (
   await page.locator('.frxe-mini-main').click();
   await expect(page.getByText('NOW PLAYING', { exact: true })).toBeVisible();
 });
+
+
+test('FRXE Save uses the Cobalt bridge', async ({ page }) => {
+  let requestBody = null;
+  await page.route('**/api/cobalt-download', async (route) => {
+    requestBody = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ status: 'picker', items: [{ type: 'video', url: 'https://media.example/item.mp4' }] }),
+    });
+  });
+
+  await page.goto('/music');
+  await page.locator('.frxe-nav').getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByText('Frxe Save · Cobalt')).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Download mode' })).toHaveValue('audio');
+  await page.getByLabel('Media URL').fill('https://www.youtube.com/watch?v=example');
+  await page.getByRole('button', { name: 'Download with Cobalt' }).click();
+
+  await expect.poll(() => requestBody).toMatchObject({
+    url: 'https://www.youtube.com/watch?v=example',
+    downloadMode: 'audio',
+    audioFormat: 'mp3',
+    videoQuality: '1080',
+  });
+  await expect(page.getByText('Choose an item')).toBeVisible();
+  await expect(page.getByRole('link', { name: /video 1/i })).toHaveAttribute('href', 'https://media.example/item.mp4');
+});
