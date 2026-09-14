@@ -244,9 +244,10 @@ test('FRXE Save surfaces provider challenge with Open source and Retry', async (
   await page.getByLabel('Media URL').fill('https://example.com/watch/1');
   await page.getByRole('button', { name: 'Save media' }).click();
 
-  await expect(page.getByText('Please complete the CAPTCHA on the source site.')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Open source' })).toHaveAttribute('href', 'https://example.com/watch/1');
-  await page.getByRole('button', { name: 'Retry' }).click();
+  const challengeCard = page.locator('.frxe-save-picker', { has: page.getByText(/Action required/i) });
+  await expect(challengeCard.getByText('Please complete the CAPTCHA on the source site.')).toBeVisible();
+  await expect(challengeCard.getByRole('link', { name: 'Open source' })).toHaveAttribute('href', 'https://example.com/watch/1');
+  await challengeCard.getByRole('button', { name: 'Retry' }).click();
   await expect.poll(() => extractCalls).toBe(2);
   await expect(page.getByText(/yt-dlp found 1 downloadable item/i)).toBeVisible();
 });
