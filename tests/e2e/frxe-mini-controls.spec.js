@@ -46,7 +46,7 @@ test('FRXE mini player exposes previous, next and volume controls', async ({ pag
   await page.locator('.frxe-nav').getByRole('button', { name: 'Search' }).click();
   await page.getByRole('textbox', { name: 'Search Frxe' }).fill('Alpha');
   await page.getByRole('button', { name: 'Search music' }).click();
-  await page.getByRole('button', { name: 'Play Alpha', exact: true }).click();
+  await page.getByRole('button', { name: 'Play Alpha', exact: true }).first().click();
 
   const mini = page.locator('.frxe-mini-player');
   await expect(mini.getByText('Alpha', { exact: true })).toBeVisible();
