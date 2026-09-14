@@ -7,17 +7,20 @@ from unittest.mock import patch
 WORKER_DIR = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(WORKER_DIR))
 
+IMPORT_ERROR = None
 try:
     import app as worker_app
     from fastapi.testclient import TestClient
-except Exception:
+except Exception as exc:
+    IMPORT_ERROR = exc
     worker_app = None
     TestClient = None
 
 
 class WorkerAppTests(unittest.TestCase):
     def require_app(self):
-        self.assertIsNotNone(worker_app, 'extractor-worker/app.py must exist and import successfully')
+        detail = f': {type(IMPORT_ERROR).__name__}: {IMPORT_ERROR}' if IMPORT_ERROR else ''
+        self.assertIsNotNone(worker_app, f'extractor-worker/app.py must exist and import successfully{detail}')
         self.assertIsNotNone(TestClient)
 
     def payload(self):
