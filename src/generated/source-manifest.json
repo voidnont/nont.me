@@ -1,50 +1,13 @@
 {
-  "voidnont/nont": {
-    "repo": "voidnont/nont",
-    "defaultBranch": "main",
-    "treeSha": "302bb832da5c47c2a6e843086b75fa5369bed1ee",
-    "pushedAt": "2026-09-14T12:22:41Z",
-    "version": "0.4.4",
-    "name": "nont",
-    "description": "Nont - open app and download hub by Void for Windows and Android.",
-    "platforms": [
-      "Windows",
-      "Android"
-    ],
-    "capabilities": [
-      "Installer",
-      "Downloads",
-      "Library",
-      "Updates",
-      "Settings",
-      "Icon fixes"
-    ],
-    "syncError": "https://api.github.com/repos/voidnont/nont returned 404"
-  },
-  "voidnont/Frxe": {
-    "repo": "voidnont/Frxe",
+  "voidnont/frxe": {
+    "repo": "voidnont/frxe",
     "defaultBranch": "main",
     "treeSha": "b6c4bab360925cc7c19b4b87f26ac0ac76d3b93b",
     "pushedAt": "2026-09-14T16:31:05Z",
     "version": "0.6.6",
     "name": "frxe",
     "description": "FRXE liquid-glass music player",
-    "platforms": [
-      "Android"
-    ],
-    "capabilities": [
-      "Liquid Glass",
-      "Home",
-      "Search",
-      "Save",
-      "Library",
-      "Now Playing",
-      "Lyrics",
-      "Listen Together",
-      "Voice",
-      "Cast",
-      "Android Auto",
-      "Queue"
-    ]
+    "platforms": ["Android"],
+    "capabilities": ["Liquid Glass", "Home", "Search", "Save", "Library", "Now Playing", "Lyrics", "Listen Together", "Voice", "Cast", "Android Auto", "Queue"]
   }
 }
