@@ -34,7 +34,7 @@ jobs:
       - name: Validate project invariants
         run: npm run check
 
-      - name: Unit test shared music logic
+      - name: Unit test app hub and shared logic
         run: npm run test:unit
 
       - name: Build production bundle
