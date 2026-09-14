@@ -21,7 +21,7 @@ jobs:
         with:
           node-version: 24
       - name: Apply source patch
-        run: node scripts/apply-cobalt-web-save.mjs
+        run: node scripts/run-cobalt-web-save-patch.mjs
       - name: Commit patched website
         run: |
           git config user.name "github-actions[bot]"
