@@ -4,7 +4,7 @@ from core import extract_youtube_id
 def _terminal(result):
     if not isinstance(result, dict):
         return False
-    return result.get('status') in {'ready', 'picker', 'challenge'}
+    return result.get('status') in {'ready', 'picker', 'challenge', 'error'}
 
 
 def extract_media(request, innertube_extract, ytdlp_extract):
@@ -20,6 +20,8 @@ def extract_media(request, innertube_extract, ytdlp_extract):
         return result
 
     return {
-        'status': 'fallback',
-        'reason': 'unresolved_by_innertube_and_yt_dlp',
+        'status': 'error',
+        'message': 'InnerTube and yt-dlp could not extract this media.',
+        'sourceUrl': source_url,
+        'extractor': 'yt-dlp',
     }

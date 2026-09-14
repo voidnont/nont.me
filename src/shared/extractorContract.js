@@ -94,18 +94,22 @@ export function normalizeWorkerResult(value = {}) {
   if (status === 'challenge') {
     const challenge = String(value.challenge || '');
     if (!CHALLENGES.has(challenge)) throw new Error('Extractor returned an unsupported challenge.');
-    const normalized = {
+    return {
       status: 'challenge',
       challenge,
       message: cleanText(value.message, 'The source requires an action before extraction can continue.').slice(0, 1000),
       sourceUrl: normalizePublicHttpUrl(value.sourceUrl),
       extractor: cleanText(value.extractor, 'worker').slice(0, 32),
     };
-    return normalized;
   }
 
-  if (status === 'fallback') {
-    return { status: 'fallback', reason: cleanText(value.reason, 'unresolved').slice(0, 256) };
+  if (status === 'error') {
+    return {
+      status: 'error',
+      message: cleanText(value.message, 'The media could not be extracted.').slice(0, 1000),
+      sourceUrl: normalizePublicHttpUrl(value.sourceUrl),
+      extractor: cleanText(value.extractor, 'worker').slice(0, 32),
+    };
   }
 
   throw new Error('Extractor worker returned an unsupported response.');

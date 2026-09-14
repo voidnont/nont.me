@@ -34,7 +34,7 @@ class PipelineTests(unittest.TestCase):
 
         def ytdlp(req):
             calls.append('yt-dlp')
-            return {'status': 'fallback', 'reason': 'unexpected'}
+            return None
 
         result = pipeline.extract_media(self.request(), innertube, ytdlp)
         self.assertEqual(result['status'], 'ready')
@@ -88,10 +88,16 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(result['status'], 'ready')
         self.assertEqual(calls, ['yt-dlp'])
 
-    def test_unresolved_extractors_return_cobalt_fallback_marker(self):
+    def test_unresolved_extractors_return_user_visible_error(self):
         self.require_pipeline()
+        source = self.request()['url']
         result = pipeline.extract_media(self.request(), lambda req: None, lambda req: None)
-        self.assertEqual(result, {'status': 'fallback', 'reason': 'unresolved_by_innertube_and_yt_dlp'})
+        self.assertEqual(result, {
+            'status': 'error',
+            'message': 'InnerTube and yt-dlp could not extract this media.',
+            'sourceUrl': source,
+            'extractor': 'yt-dlp',
+        })
 
 
 if __name__ == '__main__':

@@ -39,7 +39,7 @@ test('extraction request rejects unsafe and non-web targets', () => {
   assert.throws(() => contract.buildExtractionRequest({ url: 'http://169.254.1.2/private' }), /public media URL/i);
 });
 
-test('worker result normalizer preserves ready, picker, challenge and fallback results', () => {
+test('worker result normalizer preserves ready, picker, challenge and error results', () => {
   assert.ok(contract);
   assert.deepEqual(contract.normalizeWorkerResult({
     status: 'ready',
@@ -79,14 +79,22 @@ test('worker result normalizer preserves ready, picker, challenge and fallback r
     extractor: 'yt-dlp',
   });
 
-  assert.deepEqual(contract.normalizeWorkerResult({ status: 'fallback', reason: 'unsupported' }), {
-    status: 'fallback',
-    reason: 'unsupported',
+  assert.deepEqual(contract.normalizeWorkerResult({
+    status: 'error',
+    message: 'No direct media was found.',
+    sourceUrl: 'https://example.com/watch/1',
+    extractor: 'yt-dlp',
+  }), {
+    status: 'error',
+    message: 'No direct media was found.',
+    sourceUrl: 'https://example.com/watch/1',
+    extractor: 'yt-dlp',
   });
 });
 
-test('worker result normalizer rejects unknown challenge codes and unsafe result URLs', () => {
+test('worker result normalizer rejects unknown challenge codes, old fallback status and unsafe result URLs', () => {
   assert.ok(contract);
   assert.throws(() => contract.normalizeWorkerResult({ status: 'challenge', challenge: 'solve_automatically' }), /challenge/i);
+  assert.throws(() => contract.normalizeWorkerResult({ status: 'fallback', reason: 'unsupported' }), /unsupported response/i);
   assert.throws(() => contract.normalizeWorkerResult({ status: 'ready', url: 'file:///tmp/a' }), /HTTP or HTTPS/i);
 });
