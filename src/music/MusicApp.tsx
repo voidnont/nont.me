@@ -149,6 +149,10 @@ export default function MusicApp() {
   const [saveUrl, setSaveUrl] = useState('');
   const [saveStatus, setSaveStatus] = useState('');
   const [saveBusy, setSaveBusy] = useState(false);
+  const [saveMode, setSaveMode] = useState<'auto' | 'audio' | 'mute'>('audio');
+  const [saveAudioFormat, setSaveAudioFormat] = useState<'best' | 'mp3' | 'ogg' | 'wav' | 'opus'>('mp3');
+  const [saveVideoQuality, setSaveVideoQuality] = useState('1080');
+  const [saveItems, setSaveItems] = useState<Array<{ type: string; url: string; thumb?: string; filename?: string }>>([]);
 
   const libraryIds = useMemo(() => new Set(library.map((track) => track.id)), [library]);
   const homeSignal = useMemo(() => uniqueTracks([...history, ...library, ...results]).slice(0, 12), [history, library, results]);
@@ -379,30 +383,42 @@ export default function MusicApp() {
     if (saveBusy || !saveUrl.trim()) return;
     setSaveBusy(true);
     setSaveStatus('');
+    setSaveItems([]);
     try {
-      const url = new URL(saveUrl.trim());
-      if (url.protocol !== 'https:') throw new Error('Use an HTTPS direct media URL.');
-      if (/youtube\.com$|youtu\.be$/i.test(url.hostname) || url.hostname.endsWith('.youtube.com')) {
-        throw new Error('YouTube stays in the embedded player. Save only authorized direct media URLs.');
+      const response = await fetch('/api/cobalt-download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: saveUrl.trim(),
+          downloadMode: saveMode,
+          audioFormat: saveAudioFormat,
+          audioBitrate: '320',
+          videoQuality: saveVideoQuality,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || `Cobalt request failed (${response.status}).`);
+
+      if (data.status === 'picker' && Array.isArray(data.items)) {
+        setSaveItems(data.items);
+        setSaveStatus(`Cobalt found ${data.items.length} downloadable item${data.items.length === 1 ? '' : 's'}.`);
+        return;
       }
 
-      try {
-        const response = await fetch(url.toString(), { mode: 'cors' });
-        if (!response.ok) throw new Error(`Download returned ${response.status}`);
-        const blob = await response.blob();
-        const objectUrl = URL.createObjectURL(blob);
+      if ((data.status === 'tunnel' || data.status === 'redirect') && data.url) {
         const anchor = document.createElement('a');
-        anchor.href = objectUrl;
-        anchor.download = decodeURIComponent(url.pathname.split('/').pop() || 'frxe-media');
+        anchor.href = data.url;
+        anchor.target = '_blank';
+        anchor.rel = 'noopener noreferrer';
+        if (data.filename) anchor.download = data.filename;
         document.body.appendChild(anchor);
         anchor.click();
         anchor.remove();
-        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-        setSaveStatus('Saved through the browser in the source file format.');
-      } catch {
-        window.open(url.toString(), '_blank', 'noopener,noreferrer');
-        setSaveStatus('Opened the authorized media URL in your browser download flow.');
+        setSaveStatus(data.filename ? `Download ready: ${data.filename}` : 'Download ready through Cobalt.');
+        return;
       }
+
+      throw new Error('Cobalt returned an unsupported response.');
     } catch (error) {
       setSaveStatus(error instanceof Error ? error.message : String(error));
     } finally {
@@ -490,28 +506,70 @@ export default function MusicApp() {
         {tab === 'save' && (
           <section className="frxe-screen">
             <header className="frxe-heading compact">
-              <div><h2>Save</h2><p>Save authorized direct media in the browser. YouTube stays in the embedded player.</p></div>
+              <div><h2>Save</h2><p>Paste a supported public media link and download it through your configured Cobalt instance.</p></div>
             </header>
             <Glass className="frxe-save-card" strong>
               <div className="frxe-save-preview">
                 <div className="frxe-generated-art"><Download size={28} /></div>
-                <div><strong>Frxe Save</strong><span>Browser-safe direct media</span></div>
+                <div><strong>Frxe Save · Cobalt</strong><span>Server-side Cobalt bridge · no API key exposed to the browser</span></div>
               </div>
               <form onSubmit={saveDirectMedia}>
-                <label htmlFor="frxe-save-url">Direct media URL</label>
-                <input id="frxe-save-url" value={saveUrl} onChange={(event) => setSaveUrl(event.target.value)} placeholder="https://example.com/audio.mp3" />
-                <div className="frxe-format-row">
-                  <span className="active">Original</span><span title="Android source feature">MP3 · Android</span><span title="Android source feature">FLAC · Android</span><span title="Android source feature">WAV · Android</span>
+                <label htmlFor="frxe-save-url">Media URL</label>
+                <input id="frxe-save-url" value={saveUrl} onChange={(event) => setSaveUrl(event.target.value)} placeholder="https://www.youtube.com/watch?v=..." inputMode="url" autoComplete="off" />
+                <div className="frxe-save-options">
+                  <label className="frxe-save-option">
+                    <span>Mode</span>
+                    <select aria-label="Download mode" value={saveMode} onChange={(event) => setSaveMode(event.target.value as 'auto' | 'audio' | 'mute')}>
+                      <option value="audio">Audio</option>
+                      <option value="auto">Video + audio</option>
+                      <option value="mute">Video only</option>
+                    </select>
+                  </label>
+                  <label className="frxe-save-option">
+                    <span>Audio format</span>
+                    <select aria-label="Audio format" value={saveAudioFormat} onChange={(event) => setSaveAudioFormat(event.target.value as 'best' | 'mp3' | 'ogg' | 'wav' | 'opus')} disabled={saveMode !== 'audio'}>
+                      <option value="mp3">MP3</option>
+                      <option value="wav">WAV</option>
+                      <option value="ogg">OGG</option>
+                      <option value="opus">OPUS</option>
+                      <option value="best">Best source</option>
+                    </select>
+                  </label>
+                  <label className="frxe-save-option">
+                    <span>Video quality</span>
+                    <select aria-label="Video quality" value={saveVideoQuality} onChange={(event) => setSaveVideoQuality(event.target.value)} disabled={saveMode === 'audio'}>
+                      <option value="max">Maximum</option>
+                      <option value="2160">2160p</option>
+                      <option value="1440">1440p</option>
+                      <option value="1080">1080p</option>
+                      <option value="720">720p</option>
+                      <option value="480">480p</option>
+                      <option value="360">360p</option>
+                    </select>
+                  </label>
                 </div>
                 <button className="frxe-primary wide" disabled={saveBusy || !saveUrl.trim()}>
-                  {saveBusy ? <Loader2 className="frxe-spin" size={18} /> : <Download size={18} />} Save direct media
+                  {saveBusy ? <Loader2 className="frxe-spin" size={18} /> : <Download size={18} />} Download with Cobalt
                 </button>
               </form>
             </Glass>
             <Glass className="frxe-save-status">
               <strong>Web Save status</strong>
-              <p>{saveStatus || 'The web build preserves Frxe’s safe Save policy. Browser conversion to MP3/FLAC/WAV is not faked; the Android app owns transcoding.'}</p>
+              <p>{saveStatus || 'Downloads use the Cobalt instance configured on nont.me. Only save media you are allowed to download.'}</p>
             </Glass>
+            {saveItems.length > 0 && (
+              <Glass className="frxe-save-picker" strong>
+                <strong>Choose an item</strong>
+                <div className="frxe-save-picker-grid">
+                  {saveItems.map((item, index) => (
+                    <a key={`${item.url}-${index}`} href={item.url} target="_blank" rel="noreferrer" className="frxe-save-picker-item">
+                      {item.thumb ? <img src={item.thumb} alt="" loading="lazy" /> : <div className="frxe-save-picker-icon"><Download size={20} /></div>}
+                      <span>{item.filename || `${item.type || 'media'} ${index + 1}`}</span>
+                    </a>
+                  ))}
+                </div>
+              </Glass>
+            )}
           </section>
         )}
 
