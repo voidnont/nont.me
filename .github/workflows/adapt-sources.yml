@@ -1,4 +1,4 @@
-name: Adapt from NONT sources
+name: Adapt FRXE web source
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: nont-source-adapter
+  group: nont-frxe-source-adapter
   cancel-in-progress: true
 
 jobs:
@@ -29,19 +29,19 @@ jobs:
         with:
           node-version: 22
 
-      - name: Adapt website from Nont and Frxe
+      - name: Adapt FRXE web player source metadata
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/adapt-sources.mjs
 
       - name: Commit source adaptation when changed
         run: |
-          if [ -z "$(git status --porcelain -- src/App.jsx src/music/MusicApp.tsx src/generated/source-manifest.json)" ]; then
-            echo "Nont and Frxe sources are already synchronized."
+          if [ -z "$(git status --porcelain -- src/music/MusicApp.tsx src/generated/source-manifest.json)" ]; then
+            echo "FRXE web source metadata is already synchronized."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/App.jsx src/music/MusicApp.tsx src/generated/source-manifest.json
-          git commit -m "chore: adapt website from Nont and Frxe"
+          git add src/music/MusicApp.tsx src/generated/source-manifest.json
+          git commit -m "chore: adapt FRXE web source metadata"
           git push
