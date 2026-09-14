@@ -89,6 +89,8 @@ type GeneratedPlaylist = {
   tracks: Track[];
 };
 
+type SaveItem = { type: string; url: string; thumb?: string; filename?: string };
+type SaveChallenge = { challenge: string; message: string; sourceUrl: string; extractor?: string };
 type Tab = 'home' | 'search' | 'save' | 'library' | 'settings';
 type RepeatMode = 'off' | 'queue' | 'track';
 
@@ -127,7 +129,11 @@ function decodeHtml(value: string) {
 
 function uniqueTracks(items: Track[]) {
   const seen = new Set<string>();
-  return items.filter((track) => track?.id && !seen.has(track.id) && seen.add(track.id));
+  return items.filter((track) => {
+    if (!track?.id || seen.has(track.id)) return false;
+    seen.add(track.id);
+    return true;
+  });
 }
 
 function shuffleCopy<T>(items: T[]) {
@@ -196,6 +202,8 @@ export default function MusicApp069() {
   const [saveBusy, setSaveBusy] = useState(false);
   const [saveStatus, setSaveStatus] = useState('');
   const [saveMode, setSaveMode] = useState<'audio' | 'auto' | 'mute'>('audio');
+  const [saveItems, setSaveItems] = useState<SaveItem[]>([]);
+  const [saveChallenge, setSaveChallenge] = useState<SaveChallenge | null>(null);
 
   const libraryIds = useMemo(() => new Set(library.map((track) => track.id)), [library]);
   const artists = useMemo(() => extractArtists(results, 8), [results]);
@@ -231,7 +239,7 @@ export default function MusicApp069() {
         },
         onError: (event: any) => {
           setPlaying(false);
-          setSearchError(event.message || 'FRXE background audio playback failed. Try this track again.');
+          setSearchError(event?.message || 'FRXE background audio playback failed. Try this track again.');
         },
       },
     });
@@ -426,11 +434,12 @@ export default function MusicApp069() {
     setPlaylistPickerTrack(null);
   }
 
-  async function saveMedia(event: FormEvent) {
-    event.preventDefault();
+  async function runSaveMedia() {
     if (!saveUrl.trim() || saveBusy) return;
     setSaveBusy(true);
     setSaveStatus('');
+    setSaveItems([]);
+    setSaveChallenge(null);
     try {
       const response = await fetch('/api/media-extract', {
         method: 'POST',
@@ -439,14 +448,49 @@ export default function MusicApp069() {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || `Save failed (${response.status}).`);
+
       if (data.status === 'ready' && data.url) {
-        window.open(data.url, '_blank', 'noopener,noreferrer');
-        setSaveStatus(data.filename ? `Ready: ${data.filename}` : 'Download ready.');
-      } else if (data.status === 'challenge') setSaveStatus(data.message || 'The source needs an action before extraction can continue.');
-      else if (data.status === 'picker') setSaveStatus(`Extractor found ${data.items?.length || 0} downloadable items.`);
-      else setSaveStatus(data.message || 'No downloadable item was returned.');
-    } catch (error) { setSaveStatus(error instanceof Error ? error.message : String(error)); }
-    finally { setSaveBusy(false); }
+        const anchor = document.createElement('a');
+        anchor.href = String(data.url);
+        anchor.target = '_blank';
+        anchor.rel = 'noopener noreferrer';
+        if (data.filename) anchor.download = String(data.filename);
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        setSaveStatus(data.filename ? `Download ready via ${data.extractor || 'extractor'}: ${data.filename}` : `Download ready via ${data.extractor || 'extractor'}.`);
+        return;
+      }
+
+      if (data.status === 'picker' && Array.isArray(data.items)) {
+        setSaveItems(data.items as SaveItem[]);
+        setSaveStatus(`${data.extractor || 'Extractor'} found ${data.items.length} downloadable item${data.items.length === 1 ? '' : 's'}.`);
+        return;
+      }
+
+      if (data.status === 'challenge' && data.sourceUrl) {
+        const challenge: SaveChallenge = {
+          challenge: String(data.challenge || 'action_required'),
+          message: String(data.message || 'The source requires an action before extraction can continue.'),
+          sourceUrl: String(data.sourceUrl),
+          extractor: data.extractor ? String(data.extractor) : undefined,
+        };
+        setSaveChallenge(challenge);
+        setSaveStatus(challenge.message);
+        return;
+      }
+
+      setSaveStatus(String(data.message || 'No downloadable item was returned.'));
+    } catch (error) {
+      setSaveStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSaveBusy(false);
+    }
+  }
+
+  async function saveMedia(event: FormEvent) {
+    event.preventDefault();
+    await runSaveMedia();
   }
 
   const tabs: Array<{ id: Tab; label: string; icon: typeof Home }> = [
@@ -467,10 +511,9 @@ export default function MusicApp069() {
         {tab === 'home' && (
           <section className="frxe-screen">
             <header className="frxe-heading frxe069-heading">
-              <div><span className="frxe-kicker">FRXE WEB · v{FRXE_WEB_VERSION}</span><h1>Home</h1><p>Made around your plays, saves, artists, genres and discovery signals.</p></div>
+              <div><span className="frxe-kicker">FRXE WEB · v{FRXE_WEB_VERSION}</span><h1>FRXE</h1><p>Home · made around your plays, saves, artists, genres and discovery signals.</p></div>
               <a className="frxe-icon-button" href={FRXE_REPO} target="_blank" rel="noreferrer" aria-label="Open FRXE source"><ExternalLink size={19} /></a>
             </header>
-
             {generatedPlaylists.length > 0 && <PlaylistShelf title="Made for you" playlists={generatedPlaylists.slice(0, 6)} onPlay={playPlaylist} />}
             {recommendationRows.map((row) => <TrackRail key={row.id} title={row.title} subtitle={row.subtitle} tracks={row.tracks} onPlay={(track) => playTrack(track, row.tracks)} onAdd={setPlaylistPickerTrack} />)}
             {recommendationBusy && <div className="frxe069-loading"><Loader2 className="frxe-spin" size={18} /> Refreshing your mixes…</div>}
@@ -482,18 +525,15 @@ export default function MusicApp069() {
         {tab === 'search' && (
           <section className="frxe-screen">
             <header className="frxe-heading compact"><div><h2>Search</h2><p>Songs, artists, genres and related mixes.</p></div></header>
-            <div className="frxe-glass strong frxe-search-glass"><form onSubmit={searchSubmit}><SearchIcon size={20} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search songs, artists, genres…" aria-label="Search FRXE" /><button type="submit" className="frxe-search-submit" disabled={searching || !query.trim()}>{searching ? <Loader2 size={18} className="frxe-spin" /> : <ArrowDown size={18} />}</button></form></div>
+            <div className="frxe-glass strong frxe-search-glass"><form onSubmit={searchSubmit}><SearchIcon size={20} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search songs, artists, genres…" aria-label="Search FRXE" /><button type="submit" aria-label="Search music" className="frxe-search-submit" disabled={searching || !query.trim()}>{searching ? <Loader2 size={18} className="frxe-spin" /> : <ArrowDown size={18} />}</button></form></div>
             {recentSearches.length > 0 && <div className="frxe069-chips">{recentSearches.slice(0, 8).map((term) => <button key={term} onClick={() => runSearch(term)}>{term}</button>)}</div>}
             {searchError && <div className="frxe-error" role="alert">{searchError}</div>}
-
             {topResult && <section className="frxe069-section"><h3>Top Result</h3><TrackRow track={topResult} current={current} playing={playing} saved={libraryIds.has(topResult.id)} onPlay={() => current?.id === topResult.id ? togglePlay() : playTrack(topResult, results)} onSave={() => toggleLibrary(topResult)} onAdd={() => setPlaylistPickerTrack(topResult)} /></section>}
             {results.length > 0 && <section className="frxe069-section"><div className="frxe069-section-title"><h3>Songs</h3><span>{results.length} results</span></div><div className="frxe-result-list">{results.slice(0, 20).map((track) => <TrackRow key={track.id} track={track} current={current} playing={playing} saved={libraryIds.has(track.id)} onPlay={() => current?.id === track.id ? togglePlay() : playTrack(track, results)} onSave={() => toggleLibrary(track)} onAdd={() => setPlaylistPickerTrack(track)} />)}</div></section>}
-
             {results.length > 0 && <div className="frxe069-search-columns">
               <section className="frxe069-section"><h3>Artists</h3><div className="frxe069-artist-grid">{artists.map((artist: any) => <button key={artist.id} className="frxe-glass frxe069-artist" onClick={() => runSearch(buildArtistQuery(artist))}>{artist.thumbnail ? <img src={artist.thumbnail} alt="" /> : <Music2 size={28} />}<strong>{artist.name}</strong><span>Artist</span></button>)}</div></section>
               <section className="frxe069-section"><h3>Genres</h3><div className="frxe069-genre-grid">{genres.map((genre: any) => <button key={genre.id} className="frxe069-genre" onClick={() => runSearch(buildGenreQuery(genre))}>{genre.name}</button>)}</div></section>
             </div>}
-
             {results.length > 0 && <section className="frxe069-section"><h3>Related Mixes</h3><div className="frxe069-mix-grid">{[...artists.slice(0, 2).map((artist: any) => ({ id: `artist-${artist.id}`, title: `${artist.name} Mix`, query: buildArtistQuery(artist) })), ...genres.slice(0, 3).map((genre: any) => ({ id: `genre-${genre.id}`, title: `${genre.name} Mix`, query: buildGenreQuery(genre) }))].map((mix) => <button key={mix.id} className="frxe-glass frxe069-mix" onClick={() => runSearch(mix.query)}><ListMusic size={22} /><strong>{mix.title}</strong><span>Open mix</span></button>)}</div></section>}
             {!searching && !results.length && !searchError && <div className="frxe-quiet-state">Search for anything—FRXE will separate songs, artists, genres and mixes.</div>}
           </section>
@@ -503,21 +543,33 @@ export default function MusicApp069() {
           <section className="frxe-screen">
             <header className="frxe-heading compact"><div><h2>Library</h2><p>Saved songs, Your Playlists and FRXE Mixes stay on this device.</p></div></header>
             <TrackRail title="Saved songs" tracks={library} onPlay={(track) => playTrack(track, library)} onAdd={setPlaylistPickerTrack} empty="Heart a song to save it here." />
-
             <section className="frxe069-section">
               <div className="frxe069-section-title"><h3>Your Playlists</h3><span>{manualPlaylists.length}</span></div>
               <div className="frxe069-create-row"><input value={playlistName} onChange={(event) => setPlaylistName(event.target.value)} placeholder="New playlist name" aria-label="New playlist name" /><button className="frxe-primary" onClick={createPlaylist} disabled={!playlistName.trim()}><Plus size={16} /> Create playlist</button></div>
               <div className="frxe069-playlist-grid">{manualPlaylists.map((playlist) => <PlaylistCard key={playlist.id} playlist={playlist} onOpen={() => setSelectedPlaylistId(playlist.id)} onPlay={() => playPlaylist(playlist.tracks)} onShuffle={() => playPlaylist(playlist.tracks, true)} />)}{!manualPlaylists.length && <p className="frxe069-muted">Create a playlist, then add songs from Search or Now Playing.</p>}</div>
             </section>
-
-            {selectedPlaylist && <section className="frxe069-section frxe-glass strong frxe069-editor"><div className="frxe069-editor-head"><div><span className="frxe-kicker">PLAYLIST</span><h3>{selectedPlaylist.name}</h3><p>{selectedPlaylist.tracks.length} songs</p></div><div className="frxe069-actions"><button onClick={() => playPlaylist(selectedPlaylist.tracks)}><Play size={16} /> Play All</button><button onClick={() => playPlaylist(selectedPlaylist.tracks, true)}><Shuffle size={16} /> Shuffle</button><button onClick={() => { const name = window.prompt('Rename playlist', selectedPlaylist.name); if (name) setManualPlaylists((items) => renameManualPlaylist(items, selectedPlaylist.id, name, Date.now()) as ManualPlaylist[]); }}>Rename</button><button onClick={() => { setManualPlaylists((items) => deleteManualPlaylist(items, selectedPlaylist.id) as ManualPlaylist[]); setSelectedPlaylistId(null); }}><Trash2 size={16} /> Delete</button><button aria-label="Close playlist" onClick={() => setSelectedPlaylistId(null)}><X size={16} /></button></div></div><div className="frxe069-editor-tracks">{selectedPlaylist.tracks.map((track, index) => <div key={track.id} className="frxe069-editor-track"><button onClick={() => playTrack(track, selectedPlaylist.tracks)}><Play size={15} /></button><span><strong>{track.title}</strong><small>{track.artist}</small></span><button aria-label="Move up" disabled={index === 0} onClick={() => setManualPlaylists((items) => moveTrackInPlaylist(items, selectedPlaylist.id, index, index - 1, Date.now()) as ManualPlaylist[])}><ArrowUp size={15} /></button><button aria-label="Move down" disabled={index === selectedPlaylist.tracks.length - 1} onClick={() => setManualPlaylists((items) => moveTrackInPlaylist(items, selectedPlaylist.id, index, index + 1, Date.now()) as ManualPlaylist[])}><ArrowDown size={15} /></button><button aria-label="Remove track" onClick={() => setManualPlaylists((items) => removeTrackFromPlaylist(items, selectedPlaylist.id, track.id, Date.now()) as ManualPlaylist[])}><Trash2 size={15} /></button></div>)}</div></section>}
-
+            {selectedPlaylist && <section className="frxe069-section frxe-glass strong frxe069-editor"><div className="frxe069-editor-head"><div><span className="frxe-kicker">PLAYLIST</span><h3>{selectedPlaylist.name}</h3><p>{selectedPlaylist.tracks.length} songs</p></div><div className="frxe069-actions"><button onClick={() => playPlaylist(selectedPlaylist.tracks)}><Play size={16} /> Play All</button><button onClick={() => playPlaylist(selectedPlaylist.tracks, true)}><Shuffle size={16} /> Shuffle</button><button onClick={() => { const name = window.prompt('Rename playlist', selectedPlaylist.name); if (name) setManualPlaylists((items) => renameManualPlaylist(items, selectedPlaylist.id, name, Date.now()) as ManualPlaylist[]); }}>Rename</button><button onClick={() => { setManualPlaylists((items) => deleteManualPlaylist(items, selectedPlaylist.id) as ManualPlaylist[]); setSelectedPlaylistId(null); }}><Trash2 size={16} /> Delete</button><button aria-label="Close playlist" onClick={() => setSelectedPlaylistId(null)}><X size={16} /></button></div></div><div className="frxe069-editor-tracks">{selectedPlaylist.tracks.map((track, index) => <div key={track.id} className="frxe069-editor-track"><button aria-label={`Play ${track.title}`} onClick={() => playTrack(track, selectedPlaylist.tracks)}><Play size={15} /></button><span><strong>{track.title}</strong><small>{track.artist}</small></span><button aria-label="Move up" disabled={index === 0} onClick={() => setManualPlaylists((items) => moveTrackInPlaylist(items, selectedPlaylist.id, index, index - 1, Date.now()) as ManualPlaylist[])}><ArrowUp size={15} /></button><button aria-label="Move down" disabled={index === selectedPlaylist.tracks.length - 1} onClick={() => setManualPlaylists((items) => moveTrackInPlaylist(items, selectedPlaylist.id, index, index + 1, Date.now()) as ManualPlaylist[])}><ArrowDown size={15} /></button><button aria-label="Remove track" onClick={() => setManualPlaylists((items) => removeTrackFromPlaylist(items, selectedPlaylist.id, track.id, Date.now()) as ManualPlaylist[])}><Trash2 size={15} /></button></div>)}</div></section>}
             <section className="frxe069-section"><h3>FRXE Mixes</h3><PlaylistShelf playlists={generatedPlaylists} onPlay={playPlaylist} />{!generatedPlaylists.length && <p className="frxe069-muted">Play and save more music to build FRXE mixes.</p>}</section>
           </section>
         )}
 
         {tab === 'save' && (
-          <section className="frxe-screen"><header className="frxe-heading compact"><div><h2>Save</h2><p>Save supported public media you are allowed to download.</p></div></header><div className="frxe-glass strong frxe069-save"><form onSubmit={saveMedia}><label>Media URL</label><input value={saveUrl} onChange={(event) => setSaveUrl(event.target.value)} placeholder="https://www.youtube.com/watch?v=…" /><label>Mode</label><select value={saveMode} onChange={(event) => setSaveMode(event.target.value as 'audio' | 'auto' | 'mute')}><option value="audio">Audio</option><option value="auto">Video + audio</option><option value="mute">Video only</option></select><button className="frxe-primary wide" disabled={saveBusy || !saveUrl.trim()}>{saveBusy ? <Loader2 className="frxe-spin" size={18} /> : <Download size={18} />} Save media</button></form><p>{saveStatus || 'FRXE uses the configured extractor worker for public media.'}</p></div></section>
+          <section className="frxe-screen">
+            <header className="frxe-heading compact"><div><h2>Save</h2><p>Paste a supported public media link. FRXE tries InnerTube first, then yt-dlp.</p></div></header>
+            <div className="frxe-glass strong frxe069-save frxe-save-card">
+              <div className="frxe-save-preview"><div className="frxe069-generated-art"><Download size={28} /></div><div><strong>Frxe Save · Extractors</strong><span>InnerTube first · yt-dlp second · challenges stay with you</span></div></div>
+              <form onSubmit={saveMedia}>
+                <label htmlFor="frxe-save-url">Media URL</label>
+                <input id="frxe-save-url" value={saveUrl} onChange={(event) => setSaveUrl(event.target.value)} placeholder="https://www.youtube.com/watch?v=..." inputMode="url" autoComplete="off" />
+                <label htmlFor="frxe-save-mode">Mode</label>
+                <select id="frxe-save-mode" value={saveMode} onChange={(event) => setSaveMode(event.target.value as 'audio' | 'auto' | 'mute')}><option value="audio">Audio</option><option value="auto">Video + audio</option><option value="mute">Video only</option></select>
+                <button className="frxe-primary wide" disabled={saveBusy || !saveUrl.trim()}>{saveBusy ? <Loader2 className="frxe-spin" size={18} /> : <Download size={18} />} Save media</button>
+              </form>
+            </div>
+            <div className="frxe-glass frxe-save-status"><strong>Web Save status</strong><p>{saveStatus || 'FRXE uses InnerTube and yt-dlp for public media. Only save media you are allowed to download.'}</p></div>
+            {saveChallenge && <div className="frxe-glass strong frxe-save-picker"><strong>Action required · {saveChallenge.challenge.replaceAll('_', ' ')}</strong><p>{saveChallenge.message}</p><div className="frxe-save-picker-grid"><a href={saveChallenge.sourceUrl} target="_blank" rel="noreferrer" className="frxe-save-picker-item"><ExternalLink size={20} /><span>Open source</span></a><button type="button" className="frxe-save-picker-item" onClick={runSaveMedia} disabled={saveBusy}>{saveBusy ? <Loader2 className="frxe-spin" size={20} /> : <Download size={20} />}<span>Retry</span></button></div></div>}
+            {saveItems.length > 0 && <div className="frxe-glass strong frxe-save-picker"><strong>Choose an item</strong><div className="frxe-save-picker-grid">{saveItems.map((item, index) => <a key={`${item.url}-${index}`} href={item.url} target="_blank" rel="noreferrer" className="frxe-save-picker-item">{item.thumb ? <img src={item.thumb} alt="" loading="lazy" /> : <div className="frxe-save-picker-icon"><Download size={20} /></div>}<span>{item.filename || `${item.type || 'media'} ${index + 1}`}</span></a>)}</div></div>}
+          </section>
         )}
 
         {tab === 'settings' && (
@@ -525,13 +577,13 @@ export default function MusicApp069() {
         )}
       </main>
 
-      {current && !playerOpen && <div className="frxe-glass strong frxe-mini-player frxe069-mini"><button className="frxe-mini-main" onClick={() => setPlayerOpen(true)}>{current.thumbnail ? <img src={current.thumbnail} alt="" /> : <Music2 size={34} />}<span><strong>{current.title}</strong><small>{current.artist}</small></span></button><div className="frxe-mini-controls"><button aria-label="Previous track" className="frxe-icon-button small" onClick={() => move(-1)}><SkipBack size={17} /></button><button aria-label={playing ? 'Pause' : 'Play'} className="frxe-icon-button small" onClick={togglePlay}>{playing ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}</button><button aria-label="Next track" className="frxe-icon-button small" onClick={() => move(1)}><SkipForward size={17} /></button></div></div>}
+      {current && !playerOpen && <div className="frxe-glass strong frxe-mini-player frxe069-mini"><button className="frxe-mini-main" onClick={() => setPlayerOpen(true)}>{current.thumbnail ? <img src={current.thumbnail} alt="" /> : <Music2 size={34} />}<span><strong>{current.title}</strong><small>{current.artist}</small></span></button><div className="frxe-mini-controls" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, flexWrap: 'wrap', maxWidth: 250 }}><button aria-label="Previous track" className="frxe-icon-button small" onClick={() => move(-1)}><SkipBack size={17} fill="currentColor" /></button><button aria-label={playing ? 'Pause' : 'Play'} className="frxe-icon-button small" onClick={togglePlay}>{playing ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}</button><button aria-label="Next track" className="frxe-icon-button small" onClick={() => move(1)}><SkipForward size={17} fill="currentColor" /></button><button aria-label={muted ? 'Unmute' : 'Mute'} className="frxe-icon-button small" onClick={() => setMuted((value) => !value)}>{muted ? <VolumeX size={17} /> : <Volume2 size={17} />}</button><input aria-label="Mini player volume" type="range" min="0" max="100" value={volume} onChange={(event) => setVolume(Number(event.target.value))} style={{ width: 72, accentColor: '#fff' }} /></div></div>}
 
       {!playerOpen && <div className="frxe-glass strong frxe-nav">{tabs.map(({ id, label, icon: Icon }) => <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}><Icon size={20} /><span>{label}</span></button>)}</div>}
 
       {playerOpen && current && <div className="frxe-player-overlay"><div className="frxe-player-bg" aria-hidden="true" /><div className="frxe-player-content frxe069-player"><div className="frxe-player-top"><button className="frxe-icon-button" aria-label="Close player" onClick={() => setPlayerOpen(false)}><ChevronDown size={23} /></button><div><strong>NOW PLAYING</strong><span>FRXE {FRXE_WEB_VERSION}</span></div><button className="frxe-icon-button" aria-label="Add to playlist" onClick={() => setPlaylistPickerTrack(current)}><Plus size={20} /></button></div><div className="frxe069-player-main">{current.thumbnail ? <img className="frxe-player-art" src={current.thumbnail} alt="" /> : <div className="frxe069-art"><Music2 size={72} /></div>}<div className="frxe-player-meta"><h2>{current.title}</h2><p>{current.artist}</p></div><div className="frxe-progress"><input aria-label="Seek" type="range" min="0" max={Math.max(duration, 1)} value={Math.min(position, Math.max(duration, 1))} onChange={(event) => seek(Number(event.target.value))} /><div><span>{formatTime(position)}</span><span>{formatTime(duration)}</span></div></div><div className="frxe-player-controls"><button className={shuffle ? 'active' : ''} onClick={() => setShuffle((value) => !value)}><Shuffle size={21} /></button><button onClick={() => move(-1)}><SkipBack size={31} /></button><button className="main" onClick={togglePlay}>{playing ? <Pause size={38} fill="currentColor" /> : <Play size={38} fill="currentColor" />}</button><button onClick={() => move(1)}><SkipForward size={31} /></button><button className={repeat !== 'off' ? 'active' : ''} onClick={() => setRepeat((value) => value === 'off' ? 'queue' : value === 'queue' ? 'track' : 'off')}><Repeat2 size={21} /></button></div><div className="frxe069-player-actions"><button onClick={() => toggleLibrary(current)}><Heart size={20} fill={libraryIds.has(current.id) ? 'currentColor' : 'none'} /> {libraryIds.has(current.id) ? 'Saved' : 'Save'}</button><button onClick={() => setPlaylistPickerTrack(current)}><Plus size={20} /> Add to playlist</button><button onClick={() => setTab('library')}><ListMusic size={20} /> Queue · {queue.length}</button></div></div></div></div>}
 
-      {playlistPickerTrack && <div className="frxe069-modal-backdrop" role="presentation" onClick={() => setPlaylistPickerTrack(null)}><div className="frxe-glass strong frxe069-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}><div className="frxe069-modal-head"><div><span className="frxe-kicker">ADD TO PLAYLIST</span><h3>{playlistPickerTrack.title}</h3></div><button className="frxe-icon-button small" onClick={() => setPlaylistPickerTrack(null)}><X size={17} /></button></div>{manualPlaylists.map((playlist) => <button key={playlist.id} className="frxe069-picker-row" onClick={() => addToPlaylist(playlist.id, playlistPickerTrack)}><ListMusic size={18} /><span><strong>{playlist.name}</strong><small>{playlist.tracks.length} songs</small></span></button>)}<div className="frxe069-create-row"><input value={playlistName} onChange={(event) => setPlaylistName(event.target.value)} placeholder="Create new playlist" /><button onClick={() => { const name = playlistName.trim(); if (!name) return; const id = globalThis.crypto?.randomUUID?.() || `playlist-${Date.now()}`; setManualPlaylists((items) => addTrackToPlaylist(createManualPlaylist(items, name, { now: Date.now(), id }), id, playlistPickerTrack, Date.now()) as ManualPlaylist[]); setPlaylistName(''); setPlaylistPickerTrack(null); }} disabled={!playlistName.trim()}><Plus size={16} /> Create & add</button></div>{!manualPlaylists.length && <p className="frxe069-muted">No playlists yet. Create one below.</p>}</div></div>}
+      {playlistPickerTrack && <div className="frxe069-modal-backdrop" role="presentation" onClick={() => setPlaylistPickerTrack(null)}><div className="frxe-glass strong frxe069-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}><div className="frxe069-modal-head"><div><span className="frxe-kicker">ADD TO PLAYLIST</span><h3>{playlistPickerTrack.title}</h3></div><button className="frxe-icon-button small" aria-label="Close add to playlist" onClick={() => setPlaylistPickerTrack(null)}><X size={17} /></button></div>{manualPlaylists.map((playlist) => <button key={playlist.id} className="frxe069-picker-row" onClick={() => addToPlaylist(playlist.id, playlistPickerTrack)}><ListMusic size={18} /><span><strong>{playlist.name}</strong><small>{playlist.tracks.length} songs</small></span></button>)}<div className="frxe069-create-row"><input aria-label="Create new playlist" value={playlistName} onChange={(event) => setPlaylistName(event.target.value)} placeholder="Create new playlist" /><button onClick={() => { const name = playlistName.trim(); if (!name) return; const id = globalThis.crypto?.randomUUID?.() || `playlist-${Date.now()}`; setManualPlaylists((items) => addTrackToPlaylist(createManualPlaylist(items, name, { now: Date.now(), id }), id, playlistPickerTrack, Date.now()) as ManualPlaylist[]); setPlaylistName(''); setPlaylistPickerTrack(null); }} disabled={!playlistName.trim()}><Plus size={16} /> Create & add</button></div>{!manualPlaylists.length && <p className="frxe069-muted">No playlists yet. Create one below.</p>}</div></div>}
     </div>
   );
 }
