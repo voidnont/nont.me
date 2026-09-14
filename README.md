@@ -19,17 +19,3 @@ The root site supports free-text GitHub repository search and direct `owner/repo
 ## FRXE web player
 
 The FRXE web player is served from both `music.nont.me` and `frxe.nont.me`, and remains available at the `/music` route on the main site. It includes music search, playback, library, and the server-side extractor pipeline used by FRXE Save.
-
-Both subdomains are handled by the same web build; each hostname must be attached to the same production project/domain configuration for public DNS traffic to reach it.
-
-## Development
-
-```bash
-npm install
-npm run check
-npm run test:unit
-npm run build
-npm run test:e2e
-```
-
-The Vercel production build runs validation before Vite builds the site. GitHub Actions also runs validation, JavaScript unit tests, extractor-worker tests, the production build, and Playwright browser tests.
