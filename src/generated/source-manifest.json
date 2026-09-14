@@ -7,7 +7,22 @@
     "version": "0.6.7",
     "name": "frxe",
     "description": "FRXE liquid-glass music player",
-    "platforms": ["Android"],
-    "capabilities": ["Liquid Glass", "Home", "Search", "Save", "Library", "Now Playing", "Lyrics", "Listen Together", "Voice", "Cast", "Android Auto", "Queue"]
+    "platforms": [
+      "Android"
+    ],
+    "capabilities": [
+      "Liquid Glass",
+      "Home",
+      "Search",
+      "Save",
+      "Library",
+      "Now Playing",
+      "Lyrics",
+      "Listen Together",
+      "Voice",
+      "Cast",
+      "Android Auto",
+      "Queue"
+    ]
   }
 }
