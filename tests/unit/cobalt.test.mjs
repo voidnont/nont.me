@@ -55,5 +55,6 @@ test('Cobalt response normalization supports download and picker results', () =>
       ],
     },
   );
+  assert.throws(() => cobalt.normalizeCobaltResponse({ status: 'local-processing' }), /local processing.*disabled/i);
   assert.throws(() => cobalt.normalizeCobaltResponse({ status: 'error', error: { code: 'error.api.youtube.login' } }), /error\.api\.youtube\.login/);
 });
