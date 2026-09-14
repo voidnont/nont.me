@@ -9,6 +9,7 @@ const pkg = JSON.parse(read('package.json'));
 const versionFile = read('VERSION').trim();
 const app = read('src/App.jsx');
 const main = read('src/main.jsx');
+const siteMode = read('src/site-mode.js');
 const music = read('src/music/MusicApp.tsx');
 const musicCss = read('src/music/music.css');
 const frxeIcon = read('public/frxe-icon.svg');
@@ -24,6 +25,7 @@ const sourceManifest = JSON.parse(sourceManifestText);
 const playwright = read('playwright.config.js');
 const e2e = read('tests/e2e/nont.spec.js');
 const unit = read('tests/unit/musicSearch.test.mjs');
+const siteModeUnit = read('tests/unit/site-mode.test.mjs');
 const sourceUnit = read('tests/unit/source-contract.test.mjs');
 const ci = read('.github/workflows/ci.yml');
 const adaptWorkflow = read('.github/workflows/adapt-sources.yml');
@@ -49,7 +51,7 @@ for (const file of ['README.md', 'index.html', ...['src', 'api', 'server', 'shar
   expect(!read(file).toLowerCase().includes(forbiddenDeletedRepo), `${file} must not depend on the deleted root app repository`);
 }
 
-for (const file of ['shared/github-repo.js', 'shared/release-classifier.js', 'shared/frxe-app.js', 'server/github.js', 'api/github-search.js', 'api/github-app.js', 'api/github-release.js', 'src/device.js']) {
+for (const file of ['shared/github-repo.js', 'shared/release-classifier.js', 'shared/frxe-app.js', 'server/github.js', 'api/github-search.js', 'api/github-app.js', 'api/github-release.js', 'src/device.js', 'src/site-mode.js']) {
   expect(fs.existsSync(file), `${file} must exist`);
 }
 expect(app.includes('/api/github-app?app=frxe'), 'root must load logical Frxe app');
@@ -59,6 +61,9 @@ expect(app.includes('Search GitHub apps'), 'root must expose GitHub app search i
 expect(index.includes('<title>Nont</title>'), 'public HTML title must be Nont');
 expect(index.includes('href="/nont-icon.svg"'), 'root favicon must be local');
 expect(fs.existsSync('public/nont-icon.svg'), 'local Nont favicon must exist');
+expect(siteMode.includes("'music.nont.me'") && siteMode.includes("'frxe.nont.me'"), 'FRXE web routing must support both production subdomains');
+expect(main.includes('isFrxeWebLocation'), 'root bootstrap must use shared FRXE hostname routing');
+expect(siteModeUnit.includes('both production subdomains'), 'unit suite must cover both FRXE web hostnames');
 
 expect(JSON.stringify(Object.keys(sourceManifest)) === JSON.stringify(['voidnont/frxe']), 'source manifest must contain only voidnont/frxe');
 expect(sourceAdapter.includes("repo: 'voidnont/frxe'"), 'source adapter must track only the recreated Frxe repo');
@@ -81,7 +86,7 @@ expect(extractApi.includes('normalizeWorkerResult'), 'extractor proxy must norma
 expect(extractorContract.includes("'drm_protected'"), 'extractor contract must retain visible DRM challenge classification');
 expect(extractorContract.includes("status === 'error'"), 'extractor contract must support unresolved extraction errors');
 expect(extractorUnit.includes('old fallback status'), 'unit suite must reject the retired fallback response');
-expect(main.includes("document.title = 'FRXE'"), 'music.nont.me must identify as FRXE');
+expect(main.includes("document.title = 'FRXE'"), 'FRXE web hosts must identify as FRXE');
 expect(fs.existsSync('public/frxe-icon.svg'), 'Frxe favicon must exist');
 expect(frxeIcon.includes('viewBox="0 0 108 108"'), 'Frxe web icon must keep the Android launcher viewport');
 expect(frxeIcon.includes('fill="#09090B"') && frxeIcon.includes('M0,0h108v108h-108z'), 'Frxe web icon must keep the launcher background');
