@@ -1,25 +1,34 @@
-# NONT Web Suite
+# nont.me
 
-One GitHub repository and one Vercel project containing both:
+nont.me is a device-aware GitHub app discovery and download hub. It searches public GitHub repositories, inspects their published release assets, and recommends the package that matches the visitor's operating system and architecture when that information is available.
 
-- **NONT Nexus Web** — the default site (`nont.me`)
-- **NONT Music Web** — selected automatically on `music.nont.me`
-- **Open Web Player** button on the main Nexus homepage points to `https://music.nont.me`
+## Featured app: Frxe
 
+Frxe appears as one logical app even though its platform builds live in separate repositories:
 
-## NONT Music Web
+- `voidnont/Frxe-Windows` — Windows releases such as MSI/EXE packages.
+- `voidnont/frxe` — Android/mobile releases such as APK packages.
 
-The web player searches YouTube from a Vercel server function using YouTube's signed-out WEB InnerTube endpoint and plays selected results through the official YouTube IFrame Player API.
+The root site automatically selects a compatible release for Windows, Android, macOS, Linux, or iOS when an actual installable asset exists. Unknown devices are never guessed; users can choose another download manually.
 
-It includes:
+## GitHub search
 
-- YouTube music search
-- No Google/YouTube developer API key required
-- Embedded YouTube playback
-- Play / pause / previous / next
-- Seek bar and volume
-- Shuffle and repeat
-- Queue
-- Favorites saved locally in the browser
-- Real NONT branding
-- No download feature
+The root site supports free-text GitHub repository search and direct `owner/repo` input. Platform labels come from actual release files rather than README claims. Supported package detection includes Windows installers, APK/AAB, DMG/PKG, AppImage/DEB/RPM/Flatpak/Snap, IPA, and architecture markers such as x64 and arm64.
+
+GitHub requests are performed by server-side Vercel functions. Set the optional `GITHUB_TOKEN` environment variable for higher GitHub API rate limits. The token is never sent to browser code.
+
+## FRXE web player
+
+`/music` and `music.nont.me` remain the FRXE web player, including music search, playback, library, and the server-side Cobalt Save bridge.
+
+## Development
+
+```bash
+npm install
+npm run check
+npm run test:unit
+npm run build
+npm run test:e2e
+```
+
+The Vercel production build runs validation before Vite builds the site. GitHub Actions also runs validation, unit tests, the production build, and Playwright browser tests.
