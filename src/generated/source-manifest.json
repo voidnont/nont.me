@@ -2,8 +2,8 @@
   "voidnont/nont": {
     "repo": "voidnont/nont",
     "defaultBranch": "main",
-    "treeSha": "1f1ff2964faf62957d8aeffb55d1f01e849df984",
-    "pushedAt": "2026-09-13T18:03:21Z",
+    "treeSha": "302bb832da5c47c2a6e843086b75fa5369bed1ee",
+    "pushedAt": "2026-09-14T12:12:54Z",
     "version": "0.4.4",
     "name": "nont",
     "description": "Nont - open app and download hub by Void for Windows and Android.",
@@ -23,8 +23,8 @@
   "voidnont/Frxe": {
     "repo": "voidnont/Frxe",
     "defaultBranch": "main",
-    "treeSha": "e34fae4e09f90d76587e61a6100566985aabe733",
-    "pushedAt": "2026-09-14T11:56:47Z",
+    "treeSha": "d6c980f7c8e9b8c554d374ab8fdf2310b7d0428c",
+    "pushedAt": "2026-09-14T12:12:53Z",
     "version": "0.6.5",
     "name": "frxe",
     "description": "FRXE liquid-glass music player",
