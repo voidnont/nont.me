@@ -1,4 +1,5 @@
 import urllib.request
+from urllib.parse import urlsplit
 
 MEDIA_HEADERS = (
     'Content-Type',
@@ -27,3 +28,16 @@ def copy_media_headers(headers):
         if value:
             result[name] = str(value)
     return result
+
+
+def resolve_audio_url(data):
+    if not isinstance(data, dict) or data.get('status') != 'ready' or data.get('type') != 'audio':
+        return ''
+    raw = str(data.get('url') or '').strip()
+    try:
+        parsed = urlsplit(raw)
+    except Exception:
+        return ''
+    if parsed.scheme not in {'http', 'https'} or not parsed.hostname:
+        return ''
+    return raw
