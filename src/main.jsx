@@ -1,5 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { isFrxeWebLocation } from './site-mode.js';
 
 function Recovery({ error }) {
   const message = error instanceof Error ? error.message : String(error || 'Unknown error');
@@ -30,7 +31,7 @@ function mount(element) {
 async function boot() {
   const hostname = window.location.hostname.toLowerCase();
   const pathname = window.location.pathname.toLowerCase();
-  const musicMode = hostname === 'music.nont.me' || pathname === '/music' || pathname.startsWith('/music/');
+  const musicMode = isFrxeWebLocation(hostname, pathname);
   const favicon = document.querySelector('link[rel="icon"]') || document.head.appendChild(Object.assign(document.createElement('link'), { rel: 'icon' }));
 
   if (musicMode) {
