@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: frxe-extractor
+    runtime: python
+    plan: free
+    rootDir: extractor-worker
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: EXTRACTOR_WORKER_TOKEN
+        sync: false
