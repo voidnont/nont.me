@@ -22,7 +22,7 @@ function jsonResponse(data, status = 200) {
   };
 }
 
-function versionResponse(version = '1.20260915.01.00') {
+function versionResponse(version = '2.20260915.01.00') {
   return {
     ok: true,
     status: 200,
@@ -30,7 +30,7 @@ function versionResponse(version = '1.20260915.01.00') {
   };
 }
 
-function videoPayload(id = 'music01', title = 'Signal', artist = 'Artist - Topic') {
+function videoPayload(id = 'fallback01', title = 'Fallback Song', artist = 'Artist - Topic') {
   return {
     contents: {
       videoRenderer: {
@@ -43,14 +43,61 @@ function videoPayload(id = 'music01', title = 'Signal', artist = 'Artist - Topic
   };
 }
 
-test('search tries the YouTube Music WEB_REMIX client before normal YouTube WEB', async () => {
+function musicSongPayload(id = 'music01', title = 'Signal', artist = 'Artist') {
+  return {
+    contents: {
+      sectionListRenderer: {
+        contents: [{
+          musicShelfRenderer: {
+            contents: [{
+              musicResponsiveListItemRenderer: {
+                playlistItemData: { videoId: id },
+                thumbnail: {
+                  musicThumbnailRenderer: {
+                    thumbnail: { thumbnails: [{ url: `https://i.ytimg.com/vi/${id}/hqdefault.jpg` }] },
+                  },
+                },
+                flexColumns: [
+                  {
+                    musicResponsiveListItemFlexColumnRenderer: {
+                      text: { runs: [{ text: title, navigationEndpoint: { watchEndpoint: { videoId: id } } }] },
+                    },
+                  },
+                  {
+                    musicResponsiveListItemFlexColumnRenderer: {
+                      text: {
+                        runs: [{
+                          text: artist,
+                          navigationEndpoint: {
+                            browseEndpoint: {
+                              browseId: 'UCartist',
+                              browseEndpointContextSupportedConfigs: {
+                                browseEndpointContextMusicConfig: { pageType: 'MUSIC_PAGE_TYPE_ARTIST' },
+                              },
+                            },
+                          },
+                        }],
+                      },
+                    },
+                  },
+                ],
+              },
+            }],
+          },
+        }],
+      },
+    },
+  };
+}
+
+test('search tries the YouTube Music WEB_REMIX client first and parses its song rows', async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];
   globalThis.fetch = async (url, options = {}) => {
     const value = String(url);
     if (value === 'https://www.youtube.com/') return versionResponse();
     calls.push({ url: value, options, body: JSON.parse(options.body || '{}') });
-    return jsonResponse(videoPayload());
+    return jsonResponse(musicSongPayload());
   };
 
   try {
@@ -63,6 +110,9 @@ test('search tries the YouTube Music WEB_REMIX client before normal YouTube WEB'
     assert.equal(calls[0].body?.context?.client?.clientName, 'WEB_REMIX');
     assert.equal(calls[0].options?.headers?.Origin, 'https://music.youtube.com');
     assert.equal(calls[0].options?.headers?.Referer, 'https://music.youtube.com/');
+    assert.equal(calls[0].options?.headers?.['X-Youtube-Client-Name'], '67');
+    assert.equal(res.body.items?.[0]?.id, 'music01');
+    assert.equal(res.body.items?.[0]?.artist, 'Artist');
     assert.equal(res.body.source, 'youtube-music-innertube');
   } finally {
     globalThis.fetch = originalFetch;
@@ -78,7 +128,7 @@ test('search falls back to normal YouTube WEB when YouTube Music yields no usabl
     const body = JSON.parse(options.body || '{}');
     calls.push({ url: value, body });
     if (value.startsWith('https://music.youtube.com/')) return jsonResponse({ contents: {} });
-    return jsonResponse(videoPayload('fallback01', 'Fallback Song'));
+    return jsonResponse(videoPayload());
   };
 
   try {
