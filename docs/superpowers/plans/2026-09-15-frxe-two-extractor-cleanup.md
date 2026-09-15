@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Finish the approved FRXE Save architecture by removing the last retired Cobalt validation vestige and verifying that current `main` is strictly InnerTube → yt-dlp with visible provider challenges and no third-party fallback.
+**Goal:** Finish the approved FRXE Save architecture by removing the last retired third-party fallback validation vestige and verifying that current `main` is strictly InnerTube → yt-dlp with visible provider challenges and no third extraction stage.
 
-**Architecture:** The existing Vercel `/api/media-extract` proxy remains the only browser-facing extraction API. The existing worker under `extractor-worker/` tries InnerTube first for YouTube, then yt-dlp; terminal results are `ready`, `picker`, `challenge`, or `error`. No Cobalt endpoint, key, cookie, environment variable, fallback response, or dedicated validation remains.
+**Architecture:** The existing Vercel `/api/media-extract` proxy remains the only browser-facing extraction API. The existing worker under `extractor-worker/` tries InnerTube first for YouTube, then yt-dlp; terminal results are `ready`, `picker`, `challenge`, or `error`. No retired third-party endpoint, key, cookie, environment variable, fallback response, or dedicated validation remains.
 
 **Tech Stack:** React 19 + Vite, Vercel serverless Node APIs, Python 3.13 worker, FastAPI, yt-dlp, Node test runner, Python unittest, Playwright.
 
@@ -17,7 +17,7 @@
 - Do not modify `README.md`.
 - Extraction order remains InnerTube first, yt-dlp second.
 - Do not use NewPipe Extractor.
-- Do not retain active or dormant Cobalt integration/configuration.
+- Do not retain active or dormant integration/configuration for a retired third extraction service.
 - Login, CAPTCHA, consent, age verification, and DRM are surfaced to the user, not bypassed.
 - Do not collect provider credentials or browser session cookies.
 - Preserve SSRF protections for extraction target URLs.
@@ -35,29 +35,23 @@
 
 - [ ] **Step 1: Confirm the pre-change vestige exists**
 
-Inspect `scripts/validate.mjs` and confirm it contains exactly these behaviors:
+Inspect `scripts/validate.mjs` and confirm it contains a `retiredBridge` variable built from split string fragments and two file-existence checks for a retired third-party bridge.
 
-```js
-const retiredBridge = ['co', 'balt'].join('');
-expect(!fs.existsSync(`api/${retiredBridge}-download.js`), 'retired third-party bridge must stay removed');
-expect(!fs.existsSync(`src/shared/${retiredBridge}.js`), 'retired third-party client contract must stay removed');
-```
-
-Expected: all three lines are present before cleanup.
+Expected: the declaration and both checks are present before cleanup.
 
 - [ ] **Step 2: Remove only those bridge-specific lines**
 
-Delete the `retiredBridge` declaration and both `expect(...)` checks. Do not change unrelated validation rules.
+Delete the `retiredBridge` declaration and both related `expect(...)` checks. Do not change unrelated validation rules.
 
 - [ ] **Step 3: Validate the edited file structurally**
 
-Verify `scripts/validate.mjs` still imports `fs` and `path`, still checks `api/media-extract.js`, `src/shared/extractorContract.js`, challenge UI, worker configuration, and CI commands, and contains no `retiredBridge`, `COBALT_`, `cobalt-download`, or `cobalt-key` string.
+Verify `scripts/validate.mjs` still imports `fs` and `path`, still checks `api/media-extract.js`, `src/shared/extractorContract.js`, challenge UI, worker configuration, and CI commands, and contains no `retiredBridge` variable.
 
 - [ ] **Step 4: Commit**
 
 ```bash
 git add scripts/validate.mjs
-git commit -m "chore: remove retired Cobalt validation vestige"
+git commit -m "chore: remove retired fallback validation vestige"
 ```
 
 ---
@@ -70,6 +64,7 @@ git commit -m "chore: remove retired Cobalt validation vestige"
 - Verify: `src/shared/extractorContract.js`
 - Verify: `src/music/MusicApp.tsx`
 - Verify: `tests/unit/extractorContract.test.mjs`
+- Verify: `tests/unit/noLegacyExtractorReferences.test.mjs`
 - Verify: `extractor-worker/tests/test_pipeline.py`
 - Verify: `tests/e2e/nont.spec.js`
 
@@ -86,13 +81,7 @@ Expected: InnerTube is first and yt-dlp is second.
 
 - [ ] **Step 2: Verify there is no third-stage fallback contract**
 
-Confirm `tests/unit/extractorContract.test.mjs` includes:
-
-```js
-assert.throws(() => contract.normalizeWorkerResult({ status: 'fallback', reason: 'unsupported' }), /unsupported response/i);
-```
-
-Confirm `src/shared/extractorContract.js` has no accepted `fallback` branch.
+Confirm `tests/unit/extractorContract.test.mjs` rejects `{ status: 'fallback' }` as an unsupported response and `src/shared/extractorContract.js` has no accepted `fallback` branch.
 
 Expected: legacy fallback results are rejected.
 
@@ -102,11 +91,11 @@ Confirm the contract allowlist contains `login_required`, `captcha_required`, `c
 
 Expected: challenges are visible and user-driven; no bypass logic exists.
 
-- [ ] **Step 4: Verify repository-wide active integration absence**
+- [ ] **Step 4: Verify repository-wide retired-service absence**
 
-Search the current branch source/config tree (`api`, `src`, `server`, `shared`, `scripts`, `extractor-worker`, `tests`, `.github`, `render.yaml`, `vercel.json`, `package.json`) for `COBALT_`, `cobalt-download`, `cobalt-key`, and case-insensitive `cobalt`.
+Run the existing `tests/unit/noLegacyExtractorReferences.test.mjs` as part of `npm run test:unit`.
 
-Expected: zero active-code/config matches after Task 1. Documentation describing the removal is allowed.
+Expected: zero repository references to the retired service, including filenames and documentation content.
 
 ---
 
@@ -120,11 +109,7 @@ Expected: zero active-code/config matches after Task 1. Documentation describing
 
 - [ ] **Step 1: Open a PR from `frxe-two-extractor-cleanup` to `main`**
 
-Use title:
-
-```text
-Remove final Cobalt vestige from FRXE Save
-```
+Use a title describing removal of the final retired-fallback vestige without naming the retired service.
 
 PR body must state that production extraction was already InnerTube → yt-dlp and this change removes the remaining bridge-specific validator vestige while documenting/confirming the two-extractor architecture.
 
@@ -149,7 +134,7 @@ Confirm:
 
 ```text
 README.md is unchanged
-No active Cobalt integration/configuration exists
+No active or dormant retired third-party extraction integration/configuration exists
 No NewPipe code exists
 No login/CAPTCHA/DRM bypass was added
 Only approved docs plus the validator cleanup changed
