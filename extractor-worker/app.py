@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from core import VIDEO_ID_RE, ensure_public_url
 from extractors import innertube_extract, ytdlp_extract
-from pipeline import extract_media
+from pipeline import extract_media, extract_playback_audio
 from relay import build_media_request, copy_media_headers, resolve_audio_url
 
 app = FastAPI(title='FRXE Extractor Worker', docs_url=None, redoc_url=None)
@@ -77,7 +77,7 @@ def stream_audio(
         'videoQuality': '1080',
     }
     try:
-        result = extract_media(request_data, innertube_extract, ytdlp_extract)
+        result = extract_playback_audio(request_data, innertube_extract, ytdlp_extract)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f'Extractor worker failed: {str(exc)[:500]}') from exc
 
@@ -88,7 +88,10 @@ def stream_audio(
         raise HTTPException(status_code=502, detail=str((result or {}).get('message') if isinstance(result, dict) else 'No playable audio stream was returned.')[:500])
 
     try:
-        upstream = urllib.request.urlopen(build_media_request(media_url, range_header), timeout=20)
+        upstream = urllib.request.urlopen(
+            build_media_request(media_url, range_header, (result or {}).get('httpHeaders')),
+            timeout=20,
+        )
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f'Upstream media request failed: {str(exc)[:400]}') from exc
 

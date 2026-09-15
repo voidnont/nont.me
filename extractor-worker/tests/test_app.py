@@ -100,11 +100,15 @@ class WorkerAppTests(unittest.TestCase):
             'status': 'ready',
             'type': 'audio',
             'url': 'https://media.example/audio.webm',
-            'extractor': 'innertube',
+            'httpHeaders': {
+                'User-Agent': 'yt-dlp-agent',
+                'Referer': 'https://www.youtube.com/',
+            },
+            'extractor': 'yt-dlp',
         }
         fake_media = FakeMediaResponse()
         with patch.dict(os.environ, {'EXTRACTOR_WORKER_TOKEN': 'test-worker-token'}, clear=False), \
-             patch.object(worker_app, 'extract_media', return_value=ready) as extract_media, \
+             patch.object(worker_app, 'extract_playback_audio', return_value=ready) as extract_playback_audio, \
              patch('urllib.request.urlopen', return_value=fake_media) as urlopen:
             client = TestClient(worker_app.app)
             response = client.get(
@@ -114,10 +118,12 @@ class WorkerAppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 206)
         self.assertEqual(response.headers['content-range'], 'bytes 10-19/100')
         self.assertEqual(response.content, b'0123456789')
-        request = extract_media.call_args.args[0]
+        request = extract_playback_audio.call_args.args[0]
         self.assertEqual(request['downloadMode'], 'audio')
         media_request = urlopen.call_args.args[0]
         self.assertEqual(media_request.get_header('Range'), 'bytes=10-19')
+        self.assertEqual(media_request.get_header('User-agent'), 'yt-dlp-agent')
+        self.assertEqual(media_request.get_header('Referer'), 'https://www.youtube.com/')
         self.assertTrue(fake_media.closed)
 
 

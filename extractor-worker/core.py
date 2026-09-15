@@ -12,6 +12,13 @@ YOUTUBE_HOSTS = {
     'www.youtu.be',
 }
 VIDEO_ID_RE = re.compile(r'^[A-Za-z0-9_-]{6,20}$')
+SAFE_MEDIA_REQUEST_HEADERS = {
+    'accept': 'Accept',
+    'accept-language': 'Accept-Language',
+    'origin': 'Origin',
+    'referer': 'Referer',
+    'user-agent': 'User-Agent',
+}
 
 
 def ensure_public_url(value: str) -> str:
@@ -147,6 +154,18 @@ def _normalize_innertube_item(item, media_type):
     return result
 
 
+def _media_http_headers(*sources):
+    merged = {}
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        for name, value in source.items():
+            canonical = SAFE_MEDIA_REQUEST_HEADERS.get(str(name).strip().lower())
+            if canonical and value is not None and str(value).strip():
+                merged[canonical] = str(value)
+    return merged
+
+
 def choose_innertube_format(streaming_data, mode='audio', quality='1080'):
     if not isinstance(streaming_data, dict):
         return None
@@ -226,4 +245,7 @@ def choose_ytdlp_format(info, mode='audio', quality='1080'):
     mime = chosen.get('mime_type') or chosen.get('mimeType')
     if mime:
         result['mime'] = str(mime).split(';', 1)[0]
+    http_headers = _media_http_headers(info.get('http_headers'), chosen.get('http_headers'))
+    if http_headers:
+        result['httpHeaders'] = http_headers
     return result

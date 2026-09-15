@@ -10,12 +10,24 @@ MEDIA_HEADERS = (
     'Last-Modified',
     'Cache-Control',
 )
+SAFE_REQUEST_HEADERS = {
+    'accept': 'Accept',
+    'accept-language': 'Accept-Language',
+    'origin': 'Origin',
+    'referer': 'Referer',
+    'user-agent': 'User-Agent',
+}
 
 USER_AGENT = 'Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/153 Safari/537.36'
 
 
-def build_media_request(url, range_header=None):
+def build_media_request(url, range_header=None, media_headers=None):
     headers = {'User-Agent': USER_AGENT, 'Accept': '*/*'}
+    if isinstance(media_headers, dict):
+        for name, value in media_headers.items():
+            canonical = SAFE_REQUEST_HEADERS.get(str(name).strip().lower())
+            if canonical and value is not None and str(value).strip():
+                headers[canonical] = str(value)
     if range_header:
         headers['Range'] = range_header
     return urllib.request.Request(url, headers=headers, method='GET')
