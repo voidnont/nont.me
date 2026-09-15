@@ -2,7 +2,7 @@
 
 ## Goal
 
-FRXE Web Save uses exactly two extraction stages: **InnerTube first, yt-dlp second**. Cobalt is removed entirely.
+FRXE Web Save uses exactly two extraction stages: **InnerTube first, yt-dlp second**. The retired third-party fallback is removed entirely.
 
 ## Scope
 
@@ -10,7 +10,7 @@ FRXE Web Save uses exactly two extraction stages: **InnerTube first, yt-dlp seco
 - Do not modify `voidnont/Frxe`.
 - Do not modify `README.md`.
 - Do not use NewPipe Extractor.
-- Do not retain dormant Cobalt code or configuration.
+- Do not retain dormant code or configuration for the retired third-party fallback.
 
 ## Save flow
 
@@ -19,7 +19,7 @@ FRXE Web Save uses exactly two extraction stages: **InnerTube first, yt-dlp seco
 3. For YouTube URLs, the worker tries InnerTube first.
 4. If InnerTube cannot return a usable direct stream, the worker tries yt-dlp.
 5. If yt-dlp succeeds, return a normalized ready/picker result.
-6. If both fail, return a clear extraction error. There is no third-party fallback.
+6. If both fail, return a clear extraction error. There is no third extraction stage.
 
 ## Access challenges
 
@@ -33,17 +33,17 @@ The separately deployable worker remains in this repository and is protected by 
 
 InnerTube only uses directly returned stream URLs. It does not implement custom signature-cipher bypass logic. yt-dlp runs without provider credentials or imported browser cookies.
 
-## Cobalt removal
+## Retired fallback removal
 
-The final repository must contain no active Cobalt integration:
+The final repository must contain no active or dormant integration for the retired fallback:
 
-- no `/api/cobalt-download` or `/api/cobalt-key` endpoints;
-- no Cobalt key UI or browser cookie;
-- no `COBALT_API_URL`, `COBALT_API_KEY`, `COBALT_COOKIE_SECRET`, or `COBALT_AUTH_SCHEME` usage;
-- no Cobalt fallback from the Save flow;
-- no Cobalt-specific unit/E2E tests or validation requirements.
+- no retired fallback API endpoints;
+- no API-key UI or browser cookie for a third extraction service;
+- no environment variables for a retired third extraction service;
+- no third-stage fallback from the Save flow;
+- no retired-fallback-specific unit/E2E tests or validation requirements.
 
-Historical commits may still contain old Cobalt work, but the resulting branch and final `main` tree must not.
+Historical commits may still contain old work, but the resulting branch and final `main` tree must not contain repository references to the retired service.
 
 ## Testing
 
@@ -54,5 +54,5 @@ Tests must prove:
 - login/CAPTCHA/consent/age/DRM challenges are surfaced, not bypassed;
 - private/internal target URLs are rejected;
 - the frontend renders Open source + Retry for actionable challenges;
-- no Cobalt code/config remains in the final tree;
+- repository-wide legacy-extractor reference checks stay green;
 - existing build, Node unit, Python worker, and Playwright tests remain green.
