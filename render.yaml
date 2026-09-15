@@ -4,8 +4,8 @@ services:
     runtime: python
     plan: free
     rootDir: extractor-worker
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    buildCommand: export DENO_INSTALL="$PWD/.deno" && curl -fsSL https://deno.land/install.sh | sh && pip install -r requirements.txt
+    startCommand: export PATH="$PWD/.deno/bin:$PATH" && uvicorn app:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - key: EXTRACTOR_WORKER_TOKEN

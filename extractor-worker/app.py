@@ -1,5 +1,6 @@
 import os
 import secrets
+import shutil
 import urllib.request
 from typing import Literal
 
@@ -39,9 +40,15 @@ def _authorize(authorization):
         raise HTTPException(status_code=401, detail='Invalid worker token.')
 
 
+def deno_available():
+    return bool(shutil.which('deno'))
+
+
 @app.get('/health')
 def health():
-    return {'ok': True}
+    if not deno_available():
+        raise HTTPException(status_code=503, detail='Deno JavaScript runtime is not available.')
+    return {'ok': True, 'deno': True}
 
 
 @app.post('/extract')
